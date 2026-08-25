@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 import { JetBrains_Mono } from 'next/font/google'
 import { ThemeProvider } from 'next-themes'
-import { Header } from '@/components/layout/Header'
 import { site } from '@/lib/site'
 import './globals.css'
 
@@ -47,7 +46,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           >
             본문으로 건너뛰기
           </a>
-          <Header />
           {children}
         </ThemeProvider>
       </body>
