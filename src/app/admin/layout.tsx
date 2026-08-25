@@ -48,12 +48,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             {session && (
               <>
                 <span className="text-xs text-fg-subtle">@{session.login}</span>
-                <a
-                  href="/api/auth/logout"
-                  className="text-xs text-fg-muted hover:text-fg-body"
-                >
-                  로그아웃
-                </a>
+                <form action="/api/auth/logout" method="post">
+                  <button type="submit" className="text-xs text-fg-muted hover:text-fg-body">
+                    로그아웃
+                  </button>
+                </form>
               </>
             )}
           </span>
