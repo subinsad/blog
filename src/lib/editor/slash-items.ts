@@ -1,4 +1,5 @@
 import type { Editor, Range } from '@tiptap/core'
+import { toCho } from '@/lib/hangul'
 
 
 export type SlashItem = {
@@ -8,20 +9,6 @@ export type SlashItem = {
   hint?: string
   run: (editor: Editor, range: Range) => void
 }
-
-const CHO = [
-  'ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ',
-  'ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ',
-]
-
-/** 초성 추출 — 검색 팔레트(§4.8)와 같은 규칙을 슬래시 메뉴에서도 쓴다. */
-export const toCho = (s: string) =>
-  [...s]
-    .map((ch) => {
-      const i = ch.charCodeAt(0) - 0xac00
-      return i >= 0 && i < 11172 ? CHO[Math.floor(i / 588)] : ch
-    })
-    .join('')
 
 export const SLASH_ITEMS: SlashItem[] = [
   { group: '기본', title: '텍스트', icon: 'T',

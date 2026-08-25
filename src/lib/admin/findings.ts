@@ -1,4 +1,5 @@
 import type { PostMeta } from './scan'
+import { normalizeTag } from '@/lib/tags'
 
 export type Finding = {
   id: string
@@ -12,8 +13,6 @@ export type Finding = {
 /** 태그 목록에서 사이트에 노출되지 않는 것 (DESIGN.md — 글 3개 미만은 숨김) */
 export const HIDE_BELOW = 3
 
-const norm = (s: string) => s.toLowerCase().replace(/[.\-_\s]/g, '')
-
 export function tagCounts(posts: PostMeta[]) {
   const m = new Map<string, number>()
   for (const p of posts) for (const t of p.tags) m.set(t, (m.get(t) ?? 0) + 1)
@@ -25,7 +24,7 @@ export function similarTagPairs(tags: string[]): [string, string][] {
   const pairs: [string, string][] = []
   for (let i = 0; i < tags.length; i++) {
     for (let j = i + 1; j < tags.length; j++) {
-      if (norm(tags[i]) === norm(tags[j])) pairs.push([tags[i], tags[j]])
+      if (normalizeTag(tags[i]) === normalizeTag(tags[j])) pairs.push([tags[i], tags[j]])
     }
   }
   return pairs

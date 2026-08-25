@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { posts, seriesList } from '@/lib/content'
+import { loadPosts } from '@/lib/admin/posts'
+import { tagCounts } from '@/lib/admin/findings'
 import { splitMdx, type Draft } from '@/lib/editor/frontmatter'
 import { PostEditor } from '@/components/editor/PostEditor'
 import { readFile } from 'node:fs/promises'
@@ -27,6 +29,8 @@ export default async function EditPage({
     body = ''
   }
 
+  const knownTags = tagCounts(await loadPosts()).map(([name, count]) => ({ name, count }))
+
   const initial: Draft = {
     title: post.title,
     date: post.date,
@@ -45,6 +49,7 @@ export default async function EditPage({
       initial={initial}
       initialBody={body}
       seriesOptions={seriesList.map((s) => ({ id: s.id, title: s.title }))}
+      knownTags={knownTags}
     />
   )
 }
