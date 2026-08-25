@@ -64,18 +64,38 @@ jobs:
 
       # 공개 페이지가 실수로 동적 렌더링이 되면 정적 생성이 통째로 무너진다.
       # 서버 컴포넌트에서 cookies()/headers() 를 읽는 순간 일어난다.
+      #
+      # 매니페스트 키가 아니라 산출된 html 로 검사한다. 키는 라우트 그룹
+      # 이름((site) 등)에 따라 바뀌지만, html 파일은 "정적으로 만들어졌는가"를
+      # 직접 나타낸다. 동적 렌더링이면 html 자체가 없다.
       - name: 공개 페이지가 정적으로 유지되는지 확인
         run: |
-          manifest=.next/server/app-paths-manifest.json
-          for route in "/page" "/posts/page" "/categories/page" "/about/page"; do
-            if ! grep -q "\"$route\"" "$manifest"; then
-              echo "::error::$route 를 찾을 수 없습니다"
+          out=.next/server/app
+          missing=0
+          for f in index.html posts.html categories.html about.html; do
+            if [ ! -f "$out/$f" ]; then
+              echo "::error::$f 가 생성되지 않았습니다 — 동적 렌더링으로 떨어졌습니다"
+              missing=1
+            fi
+          done
+
+          count=$(ls "$out"/posts/*.html 2>/dev/null | wc -l)
+          if [ "$count" -lt 1 ]; then
+            echo "::error::글 상세가 하나도 정적 생성되지 않았습니다"
+            missing=1
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            echo "생성된 html:"; find "$out" -name '*.html' | head -20
+            exit 1
+          fi
+
+          # 보호 화면이 정적으로 구워지면 내용이 빌드 산출물에 남는다
+          for f in admin.html write.html; do
+            if [ -f "$out/$f" ]; then
+              echo "::error::$f 가 정적 생성되었습니다. 보호 화면은 동적이어야 합니다."
               exit 1
             fi
           done
-          if [ ! -f .next/server/app/index.html ] && [ ! -f .next/server/app/page.html ]; then
-            echo "::error::홈이 정적으로 생성되지 않았습니다 (동적 렌더링으로 떨어짐)"
-            ls .next/server/app | head -20
-            exit 1
-          fi
-          echo "OK — 공개 페이지 정적 생성 유지"
+
+          echo "OK — 공개 페이지 정적 생성 유지 (글 상세 $count 개)"
