@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>글쓰기 — subbi.log</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#FFFFFF; --bg-subtle:#F8F9FA; --bg-elevated:#FFFFFF; --bg-hover:#F1F3F5;
+  --fg:#212529; --fg-body:#495057; --fg-muted:#868E96; --fg-subtle:#ADB5BD;
+  --border:#E9ECEF; --border-strong:#DEE2E6;
+  --accent:#4263EB; --accent-hover:#3B5BDB; --accent-subtle:#EDF2FF;
+  --code-bg:#F8F9FA;
+  --c-fe:#1971C2; --c-be:#2F9E44; --c-do:#E8590C; --c-cs:#6741D9; --c-rt:#C2255C;
+  --font-sans:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,SFMono-Regular,monospace;
+  --ease:cubic-bezier(.2,0,0,1);
+  --m-gray:#868E96; --m-red:#E03131; --m-orange:#E8590C; --m-yellow:#E67700;
+  --m-green:#2F9E44; --m-blue:#1971C2; --m-violet:#6741D9; --m-pink:#C2255C;
+  --container:1280px; --gutter:40px; --sb-w:256px; --sb-gap:56px;
+}
+[data-theme="dark"] {
+  --bg:#141517; --bg-subtle:#1A1B1E; --bg-elevated:#25262B; --bg-hover:#2C2E33;
+  --fg:#E9ECEF; --fg-body:#C1C2C5; --fg-muted:#909296; --fg-subtle:#5C5F66;
+  --border:#2C2E33; --border-strong:#373A40;
+  --accent:#748FFC; --accent-hover:#91A7FF; --accent-subtle:#1E2338;
+  --code-bg:#1A1B1E;
+  --m-gray:#909296; --m-red:#FF8787; --m-orange:#FFC078; --m-yellow:#FFD43B;
+  --m-green:#8CE99A; --m-blue:#74C0FC; --m-violet:#B197FC; --m-pink:#FAA2C1;
+  --c-fe:#74C0FC; --c-be:#8CE99A; --c-do:#FFC078; --c-cs:#B197FC; --c-rt:#FAA2C1;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--fg-body); font-family:var(--font-sans);
+  font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  word-break:keep-all; overflow-wrap:break-word;
+  transition:background .2s var(--ease), color .2s var(--ease); }
+a { color:inherit; text-decoration:none; }
+button { font-family:inherit; cursor:pointer; border:none; background:none; color:inherit; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+.skip { position:absolute; top:-9999px; left:16px; z-index:100;
+  background:var(--accent); color:#fff; padding:8px 14px; border-radius:8px; font-size:14px; }
+.skip:focus { top:12px; }
+
+
+.tb { position:sticky; top:0; z-index:50; height:56px; background:var(--bg);
+  border-bottom:1px solid var(--border); }
+.tb-in { max-width:var(--container); margin:0 auto; padding:0 var(--gutter); height:100%;
+  display:flex; align-items:center; gap:16px; }
+.tb-back { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--fg-muted);
+  height:32px; padding:0 10px; border-radius:8px; }
+.tb-back:hover { background:var(--bg-hover); color:var(--fg-body); }
+.tb-st { font-size:12px; color:var(--fg-subtle); margin-left:auto; font-variant-numeric:tabular-nums; }
+.tb-b { height:34px; padding:0 14px; border-radius:8px; font-size:13px; font-weight:500;
+  border:1px solid var(--border-strong); color:var(--fg-body); }
+.tb-b:hover { background:var(--bg-hover); }
+.tb-b.pri { background:var(--accent); color:#fff; border-color:transparent; }
+.tb-b.pri:hover { background:var(--accent-hover); }
+
+.wed { max-width:var(--container); margin:0 auto; padding:0 var(--gutter);
+  display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:56px; }
+.wdoc { max-width:720px; width:100%; margin:0 auto; padding:56px 0 160px; }
+.wtitle { font-size:32px; font-weight:700; line-height:1.35; letter-spacing:-.02em;
+  color:var(--fg); outline:none; margin-bottom:8px; }
+.wtitle:empty::before { content:attr(data-ph); color:var(--fg-subtle); }
+.wmeta { font-size:13px; color:var(--fg-subtle); padding-bottom:20px;
+  border-bottom:1px solid var(--border); margin-bottom:28px; }
+.wbody { font-size:17px; line-height:1.75; color:var(--fg-body); outline:none; min-height:400px; }
+.wbody > * { margin:0 0 1.5em; }
+.wbody h1 { font-size:32px; line-height:1.35; font-weight:700; color:var(--fg); margin:1.2em 0 .5em; letter-spacing:-.02em; }
+.wbody h2 { font-size:24px; line-height:1.45; font-weight:700; color:var(--fg); margin:1.8em 0 .5em; letter-spacing:-.015em; }
+.wbody h3 { font-size:20px; line-height:1.5; font-weight:600; color:var(--fg); margin:1.5em 0 .4em; }
+.wbody ul, .wbody ol { padding-left:1.4em; }
+.wbody li { margin-bottom:.4em; }
+.wbody blockquote { border-left:3px solid var(--border-strong); padding-left:20px; color:var(--fg-muted); }
+.wbody pre { background:var(--code-bg); border:1px solid var(--border); border-radius:8px;
+  padding:16px 18px; font-family:var(--font-mono); font-size:14px; line-height:1.7;
+  color:var(--fg-body); overflow-x:auto; }
+.wbody code { font-family:var(--font-mono); font-size:.9em; background:var(--bg-subtle);
+  padding:2px 5px; border-radius:4px; }
+.wbody pre code { background:none; padding:0; }
+.wbody hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+.wbody p:empty::before { content:"'/' 를 눌러 블록을 추가하세요"; color:var(--fg-subtle); }
+
+.wside { position:sticky; top:116px; align-self:start; padding:56px 0 0; }
+.ws-h { font-size:13px; font-weight:500; color:var(--fg); margin-bottom:16px; }
+.ws-r { display:grid; grid-template-columns:64px minmax(0,1fr); gap:12px;
+  align-items:center; margin-bottom:12px; font-size:13px; }
+.ws-l { color:var(--fg-muted); font-size:12px; }
+.ws-f { height:32px; border:1px solid var(--border); border-radius:8px; background:var(--bg);
+  padding:0 10px; font-size:13px; color:var(--fg-body); display:flex; align-items:center;
+  justify-content:space-between; }
+.ws-f:hover { border-color:var(--border-strong); }
+.ws-ta { min-height:64px; border:1px solid var(--border); border-radius:8px; padding:8px 10px;
+  font-size:13px; line-height:1.6; color:var(--fg-muted); }
+.ws-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.ws-add { font-size:12px; color:var(--accent); height:24px; display:inline-flex; align-items:center; }
+.ws-drop { height:88px; border:1px dashed var(--border-strong); border-radius:8px;
+  display:grid; place-items:center; font-size:12px; color:var(--fg-subtle); }
+.ws-div { border-top:1px solid var(--border); margin:20px 0; }
+.ws-stat { display:flex; justify-content:space-between; font-size:12px; color:var(--fg-subtle);
+  margin-bottom:6px; font-variant-numeric:tabular-nums; }
+.ws-stat b { font-weight:400; color:var(--fg-muted); font-family:var(--font-mono); }
+
+.tbar { position:sticky; top:56px; z-index:49; height:44px; background:var(--bg);
+  border-bottom:1px solid var(--border); }
+.tbar-in { max-width:var(--container); margin:0 auto; padding:0 var(--gutter);
+  height:100%; display:flex; align-items:center; gap:2px; }
+.tbar button { height:30px; min-width:30px; padding:0 6px; border-radius:6px; position:relative;
+  display:inline-flex; align-items:center; justify-content:center; gap:5px;
+  color:var(--fg-muted); font-size:13px; transition:background .15s var(--ease), color .15s var(--ease); }
+.tbar button:hover { background:var(--bg-hover); color:var(--fg); }
+.tbar button.on { background:var(--accent-subtle); color:var(--accent); }
+.tbar .blk { padding:0 10px; min-width:86px; justify-content:space-between; color:var(--fg-body); }
+.tbar .sep { width:1px; height:18px; background:var(--border); margin:0 6px; flex:0 0 auto; }
+.tbar .spacer { margin-left:auto; }
+
+[data-tip]::after { content:attr(data-tip); position:absolute; top:calc(100% + 7px); left:50%;
+  transform:translateX(-50%) scale(.96); transform-origin:top center;
+  background:var(--fg); color:var(--bg); font-size:11px; white-space:nowrap;
+  padding:4px 8px; border-radius:6px; pointer-events:none; z-index:90;
+  opacity:0; transition:opacity .12s var(--ease) .25s, transform .12s var(--ease) .25s; }
+[data-tip]:hover::after { opacity:1; transform:translateX(-50%) scale(1); }
+
+.bh { position:absolute; z-index:60; display:none; gap:2px; }
+.bh.on { display:flex; }
+.bh button { width:22px; height:22px; border-radius:4px; color:var(--fg-subtle);
+  display:grid; place-items:center; font-size:14px; line-height:1; position:relative; }
+.bh button:hover { background:var(--bg-hover); color:var(--fg-body); }
+
+.ctx { position:absolute; z-index:85; width:224px; background:var(--bg-elevated);
+  border:1px solid var(--border); border-radius:12px; padding:6px; display:none; }
+.ctx.on { display:block; }
+.ctx-g { font-size:11px; color:var(--fg-subtle); padding:6px 10px 4px; }
+.ctx-i { display:flex; align-items:center; gap:10px; height:34px; padding:0 10px;
+  border-radius:8px; font-size:13px; color:var(--fg-body); cursor:pointer; }
+.ctx-i:hover { background:var(--bg-hover); }
+.ctx-i .ic { width:20px; font-family:var(--font-mono); font-size:11px;
+  color:var(--fg-subtle); flex:0 0 auto; }
+.ctx-i .k { margin-left:auto; font-size:11px; color:var(--fg-subtle); font-family:var(--font-mono); }
+.ctx-i.danger:hover { color:#e03131; }
+.ctx-i.danger:hover .ic { color:#e03131; }
+.ctx-div { border-top:1px solid var(--border); margin:6px 0; }
+.ctx-hint { font-size:11px; color:var(--fg-subtle); padding:8px 10px 4px; line-height:1.5;
+  border-top:1px solid var(--border); margin-top:6px; }
+
+.c-gray{color:var(--m-gray)} .c-red{color:var(--m-red)} .c-orange{color:var(--m-orange)}
+.c-yellow{color:var(--m-yellow)} .c-green{color:var(--m-green)} .c-blue{color:var(--m-blue)}
+.c-violet{color:var(--m-violet)} .c-pink{color:var(--m-pink)}
+.bg-gray,.bg-red,.bg-orange,.bg-yellow,.bg-green,.bg-blue,.bg-violet,.bg-pink{
+  border-radius:3px; padding:1px 3px; margin:0 -1px; }
+.bg-gray{background:color-mix(in srgb,var(--m-gray) 20%,transparent)}
+.bg-red{background:color-mix(in srgb,var(--m-red) 18%,transparent)}
+.bg-orange{background:color-mix(in srgb,var(--m-orange) 20%,transparent)}
+.bg-yellow{background:color-mix(in srgb,var(--m-yellow) 26%,transparent)}
+.bg-green{background:color-mix(in srgb,var(--m-green) 20%,transparent)}
+.bg-blue{background:color-mix(in srgb,var(--m-blue) 20%,transparent)}
+.bg-violet{background:color-mix(in srgb,var(--m-violet) 20%,transparent)}
+.bg-pink{background:color-mix(in srgb,var(--m-pink) 20%,transparent)}
+.wbody .cap { font-size:15px; color:var(--fg-muted); }
+
+.pop { position:absolute; z-index:86; background:var(--bg-elevated);
+  border:1px solid var(--border); border-radius:12px; padding:8px; display:none; }
+.pop.on { display:block; }
+.pop-g { font-size:11px; color:var(--fg-subtle); padding:4px 6px 8px; }
+.pop-sw { display:grid; grid-template-columns:repeat(4,32px); gap:6px; }
+.pop-sw button { width:32px; height:32px; border-radius:8px; border:1px solid var(--border);
+  display:grid; place-items:center; font-size:14px; font-weight:500; position:relative; }
+.pop-sw button:hover { border-color:var(--border-stronger); }
+.pop-sw button.on::after { content:""; position:absolute; inset:-3px;
+  border:2px solid var(--accent); border-radius:10px; }
+.pop-div { border-top:1px solid var(--border); margin:10px 0 2px; }
+.pop-size { width:196px; }
+.pop-size .it { display:flex; align-items:center; gap:10px; height:38px; padding:0 10px;
+  border-radius:8px; color:var(--fg-body); cursor:pointer; }
+.pop-size .it:hover { background:var(--bg-hover); }
+.pop-size .it .px { margin-left:auto; font-size:11px; color:var(--fg-subtle);
+  font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.tbar .swatch { display:grid; place-items:center; width:16px; height:16px;
+  border-radius:4px; font-size:12px; font-weight:500; line-height:1; }
+
+.slash { position:absolute; z-index:80; width:280px; max-height:320px; overflow-y:auto;
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px;
+  padding:6px; display:none; }
+.slash.on { display:block; }
+.slash-g { font-size:11px; color:var(--fg-subtle); padding:8px 10px 4px; }
+.slash-i { display:flex; align-items:center; gap:10px; height:40px; padding:0 10px;
+  border-radius:8px; font-size:13px; color:var(--fg-body); cursor:pointer; }
+.slash-i.sel { background:var(--bg-hover); }
+.slash-i .ic { width:24px; height:24px; border-radius:6px; background:var(--bg-subtle);
+  display:grid; place-items:center; font-size:12px; color:var(--fg-muted);
+  font-family:var(--font-mono); flex:0 0 auto; }
+.slash-i .hint { margin-left:auto; font-size:11px; color:var(--fg-subtle); font-family:var(--font-mono); }
+.slash-empty { font-size:13px; color:var(--fg-subtle); padding:12px 10px; }
+
+.bub { position:absolute; z-index:80; height:36px; display:none; align-items:center; gap:2px;
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:8px; padding:0 4px; }
+.bub.on { display:flex; }
+.bub button { width:30px; height:28px; border-radius:6px; display:grid; place-items:center;
+  color:var(--fg-muted); font-size:13px; }
+.bub button:hover { background:var(--bg-hover); color:var(--fg); }
+.bub .tsel { width:auto; padding:0 8px; gap:4px; font-size:12px; display:inline-flex;
+  align-items:center; color:var(--fg-body); }
+.bub .sep { width:1px; height:18px; background:var(--border); margin:0 4px; }
+
+@media (max-width:1200px) { .wed { grid-template-columns:minmax(0,1fr); gap:0; }
+  .wside { position:static; padding:0 0 80px; max-width:720px; margin:0 auto; width:100%; }
+  .wdoc { padding-bottom:40px; } }
+</style>
+</head>
+<body>
+<div class="tb">
+  <div class="tb-in">
+    <a href="prototype.html" class="tb-back">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      나가기</a>
+    <span class="tb-st" id="st">저장됨 · 방금</span>
+    <button class="tb-b">미리보기</button>
+    <button class="tb-b pri">발행</button>
+  </div>
+</div>
+
+<div class="tbar">
+  <div class="tbar-in">
+    <button class="blk" id="blkType" data-tip="블록 타입 변경">텍스트
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+    <span class="sep"></span>
+    <button data-c="bold" data-tip="굵게  ⌘B" style="font-weight:700">B</button>
+    <button data-c="italic" data-tip="기울임  ⌘I" style="font-style:italic;font-family:Georgia,serif">I</button>
+    <button data-c="underline" data-tip="밑줄  ⌘U" style="text-decoration:underline">U</button>
+    <button data-c="strikeThrough" data-tip="취소선  ⌘⇧X" style="text-decoration:line-through">S</button>
+    <button data-c="code" data-tip="인라인 코드  ⌘E" style="font-family:var(--font-mono);font-size:12px">&lt;&gt;</button>
+    <button id="btnColor" data-tip="글자 색 · 배경 색"><span class="swatch" id="swNow" style="background:var(--bg-subtle)">A</span>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button id="btnSize" data-tip="글자 크기">Aa
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+    <span class="sep"></span>
+    <button data-c="insertUnorderedList" data-tip="불릿 목록  -">•</button>
+    <button data-c="insertOrderedList" data-tip="번호 목록  1.">1.</button>
+    <button data-b="blockquote" data-tip="인용  &gt;">"</button>
+    <span class="sep"></span>
+    <button data-b="pre" data-tip="코드 블록  ```" style="font-family:var(--font-mono);font-size:11px">```</button>
+    <button data-c="link" data-tip="링크  ⌘K"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></button>
+    <button data-c="insertHorizontalRule" data-tip="구분선  ---">—</button>
+    <span class="sep"></span>
+    <button data-c="undo" data-tip="실행 취소  ⌘Z"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg></button>
+    <button data-c="redo" data-tip="다시 실행  ⌘⇧Z"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg></button>
+    <span class="spacer"></span>
+    <button data-tip="원문(MDX) 모드  ⌘/" style="font-family:var(--font-mono);font-size:11px">MD</button>
+  </div>
+</div>
+
+<div class="wed">
+  <div class="wdoc">
+    <div class="wtitle" contenteditable="true" data-ph="제목을 입력하세요" id="title">Next.js App Router에서 MDX 파이프라인 만들기</div>
+    <div class="wmeta">2026.08.25 · Frontend · 초안</div>
+    <div class="wbody" contenteditable="true" id="body"><p>contentlayer가 유지보수를 멈춘 뒤로 대안을 찾다가 velite에 정착했다. 빌드타임에 frontmatter를 타입 안전하게 다룬다는 점은 같은데, 설정이 훨씬 단순하다.</p><h2>왜 옮겼나</h2><p>가장 큰 이유는 Next.js 15 App Router와의 호환이었다. contentlayer는 webpack 플러그인에 강하게 묶여 있어서 turbopack으로 넘어가는 순간 막힌다.</p><pre><code>export default defineConfig({
+  collections: { posts },
+})</code></pre><p></p></div>
+  </div>
+
+  <aside class="wside">
+    <div class="ws-h">발행 설정</div>
+    <div class="ws-r"><span class="ws-l">카테고리</span><div class="ws-f">Frontend <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div></div>
+    <div class="ws-r"><span class="ws-l">태그</span><div class="ws-chips"><span class="tag">#Next.js</span><span class="tag">#MDX</span><span class="ws-add">+ 추가</span></div></div>
+    <div class="ws-r"><span class="ws-l">시리즈</span><div class="ws-f">블로그 만들기 · 2편 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div></div>
+    <div class="ws-r"><span class="ws-l">발행일</span><div class="ws-f">2026.08.25</div></div>
+    <div class="ws-r" style="align-items:start"><span class="ws-l" style="padding-top:8px">요약</span><div class="ws-ta">빌드타임에 frontmatter를 타입 안전하게 다루는 방법</div></div>
+    <div class="ws-r" style="align-items:start"><span class="ws-l" style="padding-top:8px">썸네일</span><div class="ws-drop">드래그하거나 클릭</div></div>
+    <div class="ws-div"></div>
+    <div class="ws-stat"><span>slug</span><b>nextjs-mdx-pipeline</b></div>
+    <div class="ws-stat"><span>읽기 시간</span><b id="rt">약 8분</b></div>
+    <div class="ws-stat"><span>글자 수</span><b id="cc">0</b></div>
+  </aside>
+</div>
+
+<div class="bh" id="bh">
+  <button id="bhAdd" data-tip="아래에 블록 추가">+</button>
+  <button id="bhMenu" data-tip="블록 메뉴  우클릭">⋮⋮</button>
+</div>
+<div class="ctx" id="ctx"></div>
+<div class="pop" id="pop"></div>
+
+<div class="slash" id="slash"></div>
+<div class="bub" id="bub">
+  <span class="tsel">텍스트 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+  <span class="sep"></span>
+  <button data-c="bold" title="굵게" style="font-weight:700">B</button>
+  <button data-c="italic" title="기울임" style="font-style:italic;font-family:Georgia,serif">I</button>
+  <button data-c="underline" title="밑줄" style="text-decoration:underline">U</button>
+  <button data-c="strikeThrough" title="취소선" style="text-decoration:line-through">S</button>
+  <button data-c="code" title="인라인 코드" style="font-family:var(--font-mono);font-size:12px">&lt;&gt;</button>
+  <button data-c="color" title="글자 색"><span style="border-bottom:2px solid var(--m-red);line-height:1.1">A</span></button>
+  <button data-c="link" title="링크"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></button>
+</div>
+
+<script>
+const CHO = ['\u3131','\u3132','\u3134','\u3137','\u3138','\u3139','\u3141','\u3142','\u3143','\u3145','\u3146','\u3147','\u3148','\u3149','\u314a','\u314b','\u314c','\u314d','\u314e'];
+const cho = s => [...s].map(c => { const i = c.charCodeAt(0) - 0xAC00;
+  return i >= 0 && i < 11172 ? CHO[Math.floor(i / 588)] : c; }).join('');
+
+const ITEMS = [
+  { g:'기본', n:'텍스트', ic:'T', hint:'', cmd:['formatBlock','p'] },
+  { g:'기본', n:'제목 1', ic:'H1', hint:'#', cmd:['formatBlock','h1'] },
+  { g:'기본', n:'제목 2', ic:'H2', hint:'##', cmd:['formatBlock','h2'] },
+  { g:'기본', n:'제목 3', ic:'H3', hint:'###', cmd:['formatBlock','h3'] },
+  { g:'기본', n:'불릿 목록', ic:'\u2022', hint:'-', cmd:['insertUnorderedList'] },
+  { g:'기본', n:'번호 목록', ic:'1.', hint:'1.', cmd:['insertOrderedList'] },
+  { g:'기본', n:'인용', ic:'"', hint:'>', cmd:['formatBlock','blockquote'] },
+  { g:'기본', n:'구분선', ic:'\u2014', hint:'---', cmd:['insertHorizontalRule'] },
+  { g:'삽입', n:'코드 블록', ic:'&lt;/&gt;', hint:'```', cmd:['formatBlock','pre'] },
+  { g:'삽입', n:'이미지', ic:'\u25a3', hint:'', cmd:['image'] },
+  { g:'삽입', n:'표', ic:'\u229e', hint:'', cmd:['table'] },
+  { g:'삽입', n:'링크 카드', ic:'\u2197', hint:'', cmd:['linkcard'] },
+  { g:'커스텀', n:'콜아웃', ic:'\u2691', hint:'', cmd:['callout'] },
+  { g:'커스텀', n:'수식', ic:'\u221ax', hint:'$$', cmd:['math'] },
+  { g:'커스텀', n:'접기', ic:'\u25b8', hint:'', cmd:['toggle'] }
+];
+
+const bodyEl = document.getElementById('body');
+const slash = document.getElementById('slash');
+const bub = document.getElementById('bub');
+let slashOpen = false, q = '', sel = 0, filtered = [];
+
+function stats() {
+  const t = bodyEl.innerText.replace(/\s/g, '');
+  document.getElementById('cc').textContent = t.length.toLocaleString();
+  document.getElementById('rt').textContent = '약 ' + Math.max(1, Math.round(t.length / 500)) + '분';
+}
+
+function renderSlash() {
+  filtered = ITEMS.filter(i => !q || i.n.includes(q) || cho(i.n).includes(q) || cho(i.n).includes(cho(q)));
+  if (!filtered.length) { slash.innerHTML = '<div class="slash-empty">일치하는 블록이 없어요</div>'; return; }
+  if (sel >= filtered.length) sel = 0;
+  let g = '', h = '';
+  filtered.forEach((it, i) => {
+    if (it.g !== g) { g = it.g; h += '<div class="slash-g">' + g + '</div>'; }
+    h += '<div class="slash-i' + (i === sel ? ' sel' : '') + '" data-i="' + i + '">'
+       + '<span class="ic">' + it.ic + '</span>' + it.n
+       + (it.hint ? '<span class="hint">' + it.hint + '</span>' : '') + '</div>';
+  });
+  slash.innerHTML = h;
+}
+
+function openSlash() {
+  const r = window.getSelection().getRangeAt(0).getBoundingClientRect();
+  slash.style.left = (r.left + window.scrollX) + 'px';
+  slash.style.top = (r.bottom + window.scrollY + 8) + 'px';
+  slashOpen = true; q = ''; sel = 0; slash.classList.add('on'); renderSlash();
+}
+function closeSlash() { slashOpen = false; slash.classList.remove('on'); }
+
+function apply(it) {
+  closeSlash();
+  const s = window.getSelection();
+  if (s.rangeCount) {
+    const r = s.getRangeAt(0);
+    const node = r.startContainer;
+    if (node.nodeType === 3) {
+      const txt = node.textContent;
+      const i = txt.lastIndexOf('/');
+      if (i > -1) { node.textContent = txt.slice(0, i); r.setStart(node, i); r.setEnd(node, i); }
+    }
+  }
+  const [c, a] = it.cmd;
+  if (['formatBlock'].includes(c)) document.execCommand(c, false, a);
+  else if (['insertUnorderedList','insertOrderedList','insertHorizontalRule'].includes(c)) document.execCommand(c);
+  else document.execCommand('insertText', false, '[' + it.n + ' 블록]');
+  bodyEl.focus(); stats();
+}
+
+slash.addEventListener('mousedown', e => {
+  const el = e.target.closest('.slash-i');
+  if (el) { e.preventDefault(); apply(filtered[+el.dataset.i]); }
+});
+
+bodyEl.addEventListener('keydown', e => {
+  if (slashOpen) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); sel = (sel + 1) % filtered.length; renderSlash(); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); sel = (sel - 1 + filtered.length) % filtered.length; renderSlash(); return; }
+    if (e.key === 'Enter') { e.preventDefault(); if (filtered[sel]) apply(filtered[sel]); return; }
+    if (e.key === 'Escape') { e.preventDefault(); closeSlash(); return; }
+    if (e.key === 'Backspace' && !q) { closeSlash(); return; }
+  }
+  if (e.key === '/') setTimeout(openSlash, 0);
+
+  if (e.key === 'Enter') {
+    const n = window.getSelection().anchorNode;
+    if (n && n.nodeType === 3) {
+      const t = n.textContent.trim();
+      if (/^```[a-z]*$/i.test(t)) {
+        e.preventDefault(); n.textContent = '';
+        document.execCommand('formatBlock', false, 'pre');
+        return;
+      }
+      if (t === '---' || t === '***') {
+        e.preventDefault(); n.textContent = '';
+        document.execCommand('insertHorizontalRule');
+        return;
+      }
+    }
+  }
+
+  if (e.key === ' ') {
+    const n = window.getSelection().anchorNode;
+    if (!n || n.nodeType !== 3) return;
+    const t = n.textContent.trim();
+    const block = { '#':'h1', '##':'h2', '###':'h3', '>':'blockquote' }[t];
+    if (block) { e.preventDefault(); n.textContent = ''; document.execCommand('formatBlock', false, block); return; }
+    if (t === '-' || t === '*') { e.preventDefault(); n.textContent = ''; document.execCommand('insertUnorderedList'); return; }
+    if (t === '1.') { e.preventDefault(); n.textContent = ''; document.execCommand('insertOrderedList'); return; }
+    if (inlineRule(n, /\*\*([^*]+)\*\*$/, 'strong')) { e.preventDefault(); return; }
+    if (inlineRule(n, /~~([^~]+)~~$/, 's')) { e.preventDefault(); return; }
+    if (inlineRule(n, /`([^`]+)`$/, 'code')) { e.preventDefault(); return; }
+  }
+});
+
+function inlineRule(node, re, tag) {
+  const txt = node.textContent, m = txt.match(re);
+  if (!m) return false;
+  const r = document.createRange();
+  r.setStart(node, txt.length - m[0].length);
+  r.setEnd(node, txt.length);
+  r.deleteContents();
+  const el = document.createElement(tag);
+  el.textContent = m[1];
+  r.insertNode(el);
+  const after = document.createTextNode(' ');
+  el.after(after);
+  const nr = document.createRange();
+  nr.setStart(after, 1); nr.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(nr);
+  stats();
+  return true;
+}
+
+bodyEl.addEventListener('keyup', e => {
+  if (slashOpen) {
+    const n = window.getSelection().anchorNode;
+    if (n && n.nodeType === 3) {
+      const i = n.textContent.lastIndexOf('/');
+      q = i > -1 ? n.textContent.slice(i + 1) : '';
+      renderSlash();
+    }
+  }
+  stats();
+  document.getElementById('st').textContent = '저장 중\u2026';
+  clearTimeout(window._sv);
+  window._sv = setTimeout(() => document.getElementById('st').textContent = '저장됨 · 방금', 900);
+});
+
+document.addEventListener('selectionchange', () => {
+  const s = window.getSelection();
+  if (!s.rangeCount || s.isCollapsed || !bodyEl.contains(s.anchorNode)) { bub.classList.remove('on'); return; }
+  const r = s.getRangeAt(0).getBoundingClientRect();
+  bub.classList.add('on');
+  bub.style.left = (r.left + window.scrollX + r.width / 2 - bub.offsetWidth / 2) + 'px';
+  bub.style.top = (r.top + window.scrollY - bub.offsetHeight - 8) + 'px';
+});
+
+bub.addEventListener('mousedown', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  e.preventDefault();
+  const c = b.dataset.c;
+  if (c === 'color') { openPop('color', b); return; }
+  if (c === 'link') document.execCommand('createLink', false, 'https://');
+  else if (c === 'code') document.execCommand('insertHTML', false, '<code>' + window.getSelection().toString() + '</code>');
+  else document.execCommand(c);
+});
+
+document.addEventListener('mousedown', e => { if (!slash.contains(e.target)) closeSlash(); });
+
+const tbar = document.querySelector('.tbar-in');
+const bh = document.getElementById('bh');
+const ctx = document.getElementById('ctx');
+let hoverBlock = null, ctxBlock = null;
+
+const BLOCK_NAMES = { P:'텍스트', H1:'제목 1', H2:'제목 2', H3:'제목 3',
+  BLOCKQUOTE:'인용', PRE:'코드 블록', UL:'불릿 목록', OL:'번호 목록', LI:'목록' };
+
+function topBlock(node) {
+  let el = node && node.nodeType === 3 ? node.parentElement : node;
+  while (el && el.parentElement && el.parentElement !== bodyEl) el = el.parentElement;
+  return el && el.parentElement === bodyEl ? el : null;
+}
+
+function syncToolbar() {
+  const s = window.getSelection();
+  if (!s.rangeCount || !bodyEl.contains(s.anchorNode)) return;
+  ['bold','italic','underline','strikeThrough'].forEach(c => {
+    const b = tbar.querySelector('[data-c="' + c + '"]');
+    if (b) { try { b.classList.toggle('on', document.queryCommandState(c)); } catch (e) {} }
+  });
+  const blk = topBlock(s.anchorNode);
+  document.getElementById('blkType').firstChild.textContent =
+    (blk && BLOCK_NAMES[blk.tagName] || '텍스트') + ' ';
+}
+
+tbar.addEventListener('mousedown', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  e.preventDefault();
+  if (b.id === 'blkType') { const r = b.getBoundingClientRect();
+    openSlashAt(r.left + window.scrollX, r.bottom + window.scrollY + 6); return; }
+  if (b.dataset.b) { document.execCommand('formatBlock', false, b.dataset.b); }
+  else if (b.dataset.c === 'link') { document.execCommand('createLink', false, 'https://'); }
+  else if (b.dataset.c === 'code') {
+    document.execCommand('insertHTML', false, '<code>' + (window.getSelection().toString() || '코드') + '</code>'); }
+  else if (b.dataset.c) { document.execCommand(b.dataset.c); }
+  bodyEl.focus(); syncToolbar(); stats();
+});
+
+function openSlashAt(x, y) {
+  slash.style.left = x + 'px'; slash.style.top = y + 'px';
+  slashOpen = true; q = ''; sel = 0; slash.classList.add('on'); renderSlash();
+}
+
+document.querySelector('.wdoc').addEventListener('mousemove', e => {
+  const blk = topBlock(document.elementFromPoint(e.clientX, e.clientY));
+  if (!blk || !bodyEl.contains(blk)) return;
+  hoverBlock = blk;
+  const r = blk.getBoundingClientRect();
+  bh.classList.add('on');
+  bh.style.left = (r.left + window.scrollX - 54) + 'px';
+  bh.style.top = (r.top + window.scrollY + 2) + 'px';
+});
+document.querySelector('.wdoc').addEventListener('mouseleave', () => bh.classList.remove('on'));
+
+document.getElementById('bhAdd').addEventListener('mousedown', e => {
+  e.preventDefault();
+  const p = document.createElement('p');
+  hoverBlock.after(p);
+  const r = document.createRange(); r.setStart(p, 0); r.collapse(true);
+  const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  bodyEl.focus();
+  const br = p.getBoundingClientRect();
+  openSlashAt(br.left + window.scrollX, br.bottom + window.scrollY + 8);
+});
+document.getElementById('bhMenu').addEventListener('mousedown', e => {
+  e.preventDefault();
+  const r = bh.getBoundingClientRect();
+  openCtx(hoverBlock, r.left + window.scrollX, r.bottom + window.scrollY + 6);
+});
+
+const CTX_TURN = [['p','텍스트','T'],['h1','제목 1','H1'],['h2','제목 2','H2'],
+  ['h3','제목 3','H3'],['blockquote','인용','"'],['pre','코드 블록','&lt;/&gt;']];
+
+function openCtx(blk, x, y) {
+  if (!blk) return;
+  ctxBlock = blk;
+  let h = '<div class="ctx-g">전환</div>';
+  CTX_TURN.forEach(([t, n, i]) => {
+    if (blk.tagName.toLowerCase() === t) return;
+    h += '<div class="ctx-i" data-turn="' + t + '"><span class="ic">' + i + '</span>' + n + '</div>';
+  });
+  h += '<div class="ctx-div"></div>'
+    + '<div class="ctx-i" data-act="dup"><span class="ic">\u29c9</span>복제<span class="k">\u2318D</span></div>'
+    + '<div class="ctx-i" data-act="up"><span class="ic">\u2191</span>위로 이동<span class="k">\u2318\u21e7\u2191</span></div>'
+    + '<div class="ctx-i" data-act="down"><span class="ic">\u2193</span>아래로 이동<span class="k">\u2318\u21e7\u2193</span></div>'
+    + '<div class="ctx-i" data-act="copy"><span class="ic">\u2693</span>블록 링크 복사</div>'
+    + '<div class="ctx-i danger" data-act="del"><span class="ic">\u2715</span>삭제<span class="k">\u2318\u232b</span></div>'
+    + '<div class="ctx-hint">\u21e7 + 우클릭 → 브라우저 기본 메뉴</div>';
+  ctx.innerHTML = h;
+  ctx.classList.add('on');
+  const w = 224, vw = document.documentElement.clientWidth;
+  ctx.style.left = Math.min(x, vw - w - 16) + 'px';
+  ctx.style.top = y + 'px';
+}
+function closeCtx() { ctx.classList.remove('on'); }
+
+bodyEl.addEventListener('contextmenu', e => {
+  if (e.shiftKey) return;
+  const blk = topBlock(e.target);
+  if (!blk) return;
+  e.preventDefault();
+  openCtx(blk, e.pageX, e.pageY);
+});
+
+ctx.addEventListener('mousedown', e => {
+  const it = e.target.closest('.ctx-i'); if (!it) return;
+  e.preventDefault();
+  const b = ctxBlock;
+  if (it.dataset.turn) {
+    const n = document.createElement(it.dataset.turn);
+    n.innerHTML = b.innerHTML; b.replaceWith(n); ctxBlock = n;
+  } else {
+    const a = it.dataset.act;
+    if (a === 'dup') b.after(b.cloneNode(true));
+    else if (a === 'up' && b.previousElementSibling) b.previousElementSibling.before(b);
+    else if (a === 'down' && b.nextElementSibling) b.nextElementSibling.after(b);
+    else if (a === 'del') b.remove();
+  }
+  closeCtx(); stats();
+});
+
+document.addEventListener('mousedown', e => { if (!ctx.contains(e.target)) closeCtx(); });
+document.addEventListener('selectionchange', syncToolbar);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCtx(); closeSlash(); } });
+const pop = document.getElementById('pop');
+const COLORS = [['','기본'],['gray','회색'],['red','빨강'],['orange','주황'],
+  ['yellow','노랑'],['green','초록'],['blue','파랑'],['violet','보라']];
+const SIZES = [['h1','제목 1','32'],['h2','제목 2','24'],['h3','제목 3','20'],
+  ['p','본문','17'],['cap','작은 글씨','15']];
+let savedRange = null, popKind = null;
+
+function keepRange() {
+  const s = window.getSelection();
+  if (s.rangeCount && bodyEl.contains(s.anchorNode)) savedRange = s.getRangeAt(0).cloneRange();
+}
+document.addEventListener('selectionchange', keepRange);
+function restoreRange() {
+  if (!savedRange) return false;
+  const s = window.getSelection();
+  s.removeAllRanges(); s.addRange(savedRange);
+  return true;
+}
+
+function wrapSel(cls) {
+  if (!restoreRange()) return;
+  const s = window.getSelection();
+  if (s.isCollapsed) return;
+  const r = s.getRangeAt(0);
+  const frag = r.extractContents();
+  frag.querySelectorAll && frag.querySelectorAll('span[class^="c-"],span[class^="bg-"]')
+    .forEach(el => el.replaceWith(...el.childNodes));
+  if (cls) {
+    const span = document.createElement('span');
+    span.className = cls;
+    span.appendChild(frag);
+    r.insertNode(span);
+  } else {
+    r.insertNode(frag);
+  }
+  s.removeAllRanges();
+  stats();
+}
+
+function openPop(kind, anchor) {
+  keepRange();
+  popKind = kind;
+  let h = '';
+  if (kind === 'color') {
+    h = '<div class="pop-g">글자 색</div><div class="pop-sw">'
+      + COLORS.map(([c, n]) => '<button data-fg="' + c + '" title="' + n + '" style="'
+        + (c ? 'color:var(--m-' + c + ')' : 'color:var(--fg)') + '">A</button>').join('')
+      + '</div><div class="pop-div"></div><div class="pop-g">배경 색</div><div class="pop-sw">'
+      + COLORS.map(([c, n]) => '<button data-bg="' + c + '" title="' + n + '" style="'
+        + (c ? 'background:color-mix(in srgb,var(--m-' + c + ') 22%,transparent)' : '') + '">'
+        + (c ? '' : '\u2298') + '</button>').join('')
+      + '</div>';
+    pop.className = 'pop on';
+  } else {
+    h = SIZES.map(([t, n, px]) =>
+      '<div class="it" data-size="' + t + '" style="font-size:' + Math.min(+px, 20) + 'px">'
+      + n + '<span class="px">' + px + '</span></div>').join('');
+    pop.className = 'pop pop-size on';
+  }
+  pop.innerHTML = h;
+  const r = anchor.getBoundingClientRect();
+  pop.style.left = Math.min(r.left + window.scrollX,
+    document.documentElement.clientWidth - pop.offsetWidth - 16) + 'px';
+  pop.style.top = (r.bottom + window.scrollY + 8) + 'px';
+}
+function closePop() { pop.classList.remove('on'); popKind = null; }
+
+pop.addEventListener('mousedown', e => {
+  e.preventDefault();
+  const b = e.target.closest('[data-fg],[data-bg],[data-size]');
+  if (!b) return;
+  if (b.dataset.size !== undefined) {
+    restoreRange();
+    const t = b.dataset.size;
+    document.execCommand('formatBlock', false, t === 'cap' ? 'p' : t);
+    const blk = topBlock(window.getSelection().anchorNode);
+    if (blk) blk.classList.toggle('cap', t === 'cap');
+  } else if (b.dataset.fg !== undefined) {
+    wrapSel(b.dataset.fg ? 'c-' + b.dataset.fg : '');
+    const sw = document.getElementById('swNow');
+    sw.style.color = b.dataset.fg ? 'var(--m-' + b.dataset.fg + ')' : 'var(--fg)';
+  } else {
+    wrapSel(b.dataset.bg ? 'bg-' + b.dataset.bg : '');
+  }
+  closePop(); bodyEl.focus(); stats();
+});
+
+function toggle(kind, el) { popKind === kind ? closePop() : openPop(kind, el); }
+document.getElementById('btnColor').addEventListener('mousedown', e => {
+  e.preventDefault(); e.stopPropagation(); toggle('color', e.currentTarget); });
+document.getElementById('btnSize').addEventListener('mousedown', e => {
+  e.preventDefault(); e.stopPropagation(); toggle('size', e.currentTarget); });
+document.addEventListener('mousedown', e => {
+  if (!pop.contains(e.target) && !e.target.closest('#btnColor,#btnSize,.bub')) closePop();
+});
+
+syncToolbar();
+
+stats();
+</script>
+</body>
+</html>
