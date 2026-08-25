@@ -33,8 +33,8 @@ export async function POST(req: Request) {
 
   try {
     if (payload.mode === 'apply') {
-      const { written, plan } = await applyPlan(op)
-      return Response.json({ ok: true, written, plan })
+      const { written, plan, commit } = await applyPlan(op)
+      return Response.json({ ok: true, written, plan, commit })
     }
     const { plan } = await buildPlan(op)
     return Response.json({ ok: true, plan })
