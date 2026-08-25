@@ -38,11 +38,26 @@ jobs:
       - name: 프로덕션 빌드
         run: pnpm build
 
-      # DESIGN.md §13.2 — 에디터가 프로덕션에 유출되면 누구나 글을 쓸 수 있다
-      - name: 에디터가 프로덕션 번들에 포함되지 않았는지 확인
+      # DESIGN.md §13.2 — 에디터가 프로덕션에 유출되면 누구나 글을 쓸 수 있다.
+      # 404로 막는 것과 달리, 여기서는 코드 자체가 빌드에 없어야 한다.
+      - name: 에디터가 프로덕션 빌드에 없는지 확인
         run: |
-          if grep -rl "write" .next/server/app --include="*.html" 2>/dev/null | grep -q "write"; then
-            echo "::error::/write 라우트가 프로덕션 빌드에 포함되었습니다"
+          manifest=.next/server/app-paths-manifest.json
+          if [ ! -f "$manifest" ]; then
+            echo "::error::$manifest 를 찾을 수 없습니다"
             exit 1
           fi
-          echo "OK — 에디터 라우트 없음"
+
+          if grep -qE '"/(write|api/draft)' "$manifest"; then
+            echo "::error::에디터 라우트가 프로덕션 빌드에 포함되었습니다"
+            grep -oE '"/[^"]*(write|draft)[^"]*"' "$manifest"
+            exit 1
+          fi
+
+          if grep -rlq "prosemirror" .next/static/chunks 2>/dev/null; then
+            echo "::error::에디터 라이브러리가 클라이언트 번들에 포함되었습니다"
+            grep -rl "prosemirror" .next/static/chunks
+            exit 1
+          fi
+
+          echo "OK — 에디터 라우트·번들 모두 없음"
