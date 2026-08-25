@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { site } from '@/lib/site'
+import { OwnerLink } from './OwnerLink'
 import { ThemeToggle } from './ThemeToggle'
 
 export function Header() {
@@ -28,19 +29,7 @@ export function Header() {
             </kbd>
           </Link>
 
-          {process.env.NODE_ENV === 'development' && (
-            <Link
-              href="/write"
-              title="dev 모드에서만 노출"
-              className="inline-flex h-[34px] items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 20h9" />
-                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-              </svg>
-              <span className="max-[768px]:hidden">글쓰기</span>
-            </Link>
-          )}
+          <OwnerLink />
 
           <ThemeToggle />
         </div>

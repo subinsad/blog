@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { writeFile } from 'node:fs/promises'
 import { editField, yamlList, type FieldName } from './frontmatter-edit'
-import { loadPosts, REPO_ROOT, type PostMeta } from './scan'
+import { REPO_ROOT, type PostMeta } from './scan'
+import { loadPosts } from './posts'
+import { writeFiles, usesGitHub } from '@/lib/storage'
 
 const exec = promisify(execFile)
 
@@ -36,7 +37,8 @@ export type Operation =
 
 /** 대상 파일들 중 워킹트리가 더러운 것. git이 undo인 도구에서 가장 중요한 경고다. */
 async function dirtyFiles(paths: string[]): Promise<string[]> {
-  if (paths.length === 0) return []
+  // 프로덕션은 커밋으로 쓰므로 워킹트리 개념이 없다
+  if (usesGitHub || paths.length === 0) return []
   try {
     const { stdout } = await exec('git', ['status', '--porcelain', '--', ...paths], {
       cwd: REPO_ROOT,
@@ -162,31 +164,17 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
  * 계획을 실행한다. 클라이언트가 보낸 계획을 신뢰하지 않고 서버에서 다시 만든다.
  * 전부 메모리에서 만든 뒤 한 번에 쓰고, 실패하면 원본으로 되돌린다.
  */
-export async function applyPlan(op: Operation): Promise<{ written: string[]; plan: Plan }> {
+export async function applyPlan(
+  op: Operation,
+): Promise<{ written: string[]; plan: Plan; commit?: { sha: string; url: string } }> {
   const { plan, changes } = await buildPlan(op)
   if (changes.length === 0) return { written: [], plan }
 
-  const originals = new Map<string, string>()
-  const posts = await loadPosts()
-  for (const c of changes) {
-    const p = posts.find((x) => x.file.path === c.path)
-    if (p) originals.set(p.file.absPath, p.file.raw)
-  }
+  const files = changes.map((c) => {
+    if (!c.nextRaw) throw new Error(`대상 파일을 찾을 수 없습니다: ${c.path}`)
+    return { path: c.path, content: c.nextRaw }
+  })
 
-  const written: string[] = []
-  try {
-    for (const c of changes) {
-      const p = posts.find((x) => x.file.path === c.path)
-      if (!p || !c.nextRaw) throw new Error(`대상 파일을 찾을 수 없습니다: ${c.path}`)
-      await writeFile(p.file.absPath, c.nextRaw, 'utf8')
-      written.push(c.path)
-    }
-  } catch (e) {
-    for (const [abs, raw] of originals) {
-      await writeFile(abs, raw, 'utf8').catch(() => {})
-    }
-    throw e
-  }
-
-  return { written, plan }
+  const { written, commit } = await writeFiles(files, plan.headline)
+  return { written, plan, commit }
 }

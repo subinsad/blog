@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { devOnlyPage } from '@/lib/editor/dev-only'
-import { loadPosts } from '@/lib/admin/scan'
+import { requireOwner } from '@/lib/auth/require'
+import { loadPosts } from '@/lib/admin/posts'
 import { tagCounts } from '@/lib/admin/findings'
 import { CATEGORIES } from '@/lib/site'
 import { Rail } from '@/components/admin/Rail'
@@ -23,7 +23,7 @@ async function dirtyCount() {
 }
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  devOnlyPage()
+  const session = await requireOwner()
 
   const posts = await loadPosts()
   const series = new Set(posts.map((p) => p.series).filter(Boolean))
@@ -43,11 +43,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             subbi<span className="text-accent">.log</span>
           </Link>
           <span className="text-[13px] text-fg-muted">관리</span>
-          <span className="rounded bg-bg-subtle px-1.5 py-0.5 font-mono text-[10px] text-fg-subtle">
-            DEV
-          </span>
-          <span className="ml-auto">
+          <span className="ml-auto flex items-center gap-3">
             <GitChip dirtyCount={await dirtyCount()} />
+            {session && (
+              <>
+                <span className="text-xs text-fg-subtle">@{session.login}</span>
+                <a
+                  href="/api/auth/logout"
+                  className="text-xs text-fg-muted hover:text-fg-body"
+                >
+                  로그아웃
+                </a>
+              </>
+            )}
           </span>
         </div>
       </header>

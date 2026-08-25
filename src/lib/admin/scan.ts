@@ -98,11 +98,3 @@ export function readMeta(file: PostFile): PostMeta | null {
     draft: scalar(body, 'draft') === 'true',
   }
 }
-
-export async function loadPosts(): Promise<PostMeta[]> {
-  const files = await scanPostFiles()
-  return files
-    .map(readMeta)
-    .filter((x): x is PostMeta => x !== null)
-    .sort((a, b) => b.date.localeCompare(a.date))
-}

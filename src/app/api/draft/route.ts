@@ -1,6 +1,6 @@
 import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
-import { devOnlyApi } from '@/lib/editor/dev-only'
+import { requireOwner, unauthorized } from '@/lib/auth/require'
 import { buildMdx, isCategory, type Draft } from '@/lib/editor/frontmatter'
 
 const CONTENT_ROOT = resolve(process.cwd(), 'content', 'posts')
@@ -19,8 +19,7 @@ function safeDir(year: string, slug: string): string {
 }
 
 export async function POST(req: Request) {
-  const blocked = devOnlyApi()
-  if (blocked) return blocked
+  if (!(await requireOwner())) return unauthorized()
 
   let payload: Partial<Draft>
   try {
@@ -67,8 +66,7 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  const blocked = devOnlyApi()
-  if (blocked) return blocked
+  if (!(await requireOwner())) return unauthorized()
 
   const slug = new URL(req.url).searchParams.get('slug')
   if (!slug) return Response.json({ error: 'slug이 필요합니다' }, { status: 400 })

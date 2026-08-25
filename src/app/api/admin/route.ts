@@ -1,4 +1,4 @@
-import { devOnlyApi } from '@/lib/editor/dev-only'
+import { requireOwner, unauthorized } from '@/lib/auth/require'
 import { buildPlan, applyPlan, type Operation } from '@/lib/admin/plan'
 
 /** 클라이언트가 보낸 계획은 절대 신뢰하지 않는다. 작업 지시만 받고 계획은 서버가 다시 만든다. */
@@ -19,8 +19,7 @@ function parseOperation(v: unknown): Operation | null {
 }
 
 export async function POST(req: Request) {
-  const blocked = devOnlyApi()
-  if (blocked) return blocked
+  if (!(await requireOwner())) return unauthorized()
 
   let payload: { mode?: string; operation?: unknown }
   try {
