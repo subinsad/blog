@@ -40,7 +40,7 @@ jobs:
 
       # DESIGN.md §13.2 — 에디터가 프로덕션에 유출되면 누구나 글을 쓸 수 있다.
       # 404로 막는 것과 달리, 여기서는 코드 자체가 빌드에 없어야 한다.
-      - name: 에디터가 프로덕션 빌드에 없는지 확인
+      - name: 에디터·관리자가 프로덕션 빌드에 없는지 확인
         run: |
           manifest=.next/server/app-paths-manifest.json
           if [ ! -f "$manifest" ]; then
@@ -48,9 +48,9 @@ jobs:
             exit 1
           fi
 
-          if grep -qE '"/(write|api/draft)' "$manifest"; then
-            echo "::error::에디터 라우트가 프로덕션 빌드에 포함되었습니다"
-            grep -oE '"/[^"]*(write|draft)[^"]*"' "$manifest"
+          if grep -qE '"/(write|admin|api/(draft|admin))' "$manifest"; then
+            echo "::error::에디터·관리자 라우트가 프로덕션 빌드에 포함되었습니다"
+            grep -oE '"/[^"]*(write|admin|draft)[^"]*"' "$manifest"
             exit 1
           fi
 
@@ -60,4 +60,4 @@ jobs:
             exit 1
           fi
 
-          echo "OK — 에디터 라우트·번들 모두 없음"
+          echo "OK — 에디터·관리자 라우트·번들 모두 없음"

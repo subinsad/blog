@@ -1,0 +1,48 @@
+import { devOnlyApi } from '@/lib/editor/dev-only'
+import { buildPlan, applyPlan, type Operation } from '@/lib/admin/plan'
+
+/** 클라이언트가 보낸 계획은 절대 신뢰하지 않는다. 작업 지시만 받고 계획은 서버가 다시 만든다. */
+function parseOperation(v: unknown): Operation | null {
+  if (typeof v !== 'object' || v === null) return null
+  const o = v as Record<string, unknown>
+
+  if (o.kind === 'tag.merge') {
+    const from = Array.isArray(o.from) ? o.from.filter((x) => typeof x === 'string') : []
+    if (from.length === 0 || typeof o.to !== 'string' || !o.to.trim()) return null
+    return { kind: 'tag.merge', from, to: o.to.trim() }
+  }
+  if (o.kind === 'tag.delete') {
+    if (typeof o.tag !== 'string' || !o.tag.trim()) return null
+    return { kind: 'tag.delete', tag: o.tag.trim() }
+  }
+  return null
+}
+
+export async function POST(req: Request) {
+  const blocked = devOnlyApi()
+  if (blocked) return blocked
+
+  let payload: { mode?: string; operation?: unknown }
+  try {
+    payload = await req.json()
+  } catch {
+    return Response.json({ error: 'JSON 파싱 실패' }, { status: 400 })
+  }
+
+  const op = parseOperation(payload.operation)
+  if (!op) return Response.json({ error: '알 수 없는 작업입니다' }, { status: 400 })
+
+  try {
+    if (payload.mode === 'apply') {
+      const { written, plan } = await applyPlan(op)
+      return Response.json({ ok: true, written, plan })
+    }
+    const { plan } = await buildPlan(op)
+    return Response.json({ ok: true, plan })
+  } catch (e) {
+    return Response.json(
+      { error: e instanceof Error ? e.message : '작업 실패' },
+      { status: 500 },
+    )
+  }
+}
