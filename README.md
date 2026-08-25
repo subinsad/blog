@@ -102,6 +102,10 @@ cp .env.example .env.local
 | `AUTH_SECRET` | `openssl rand -base64 32` |
 | `GITHUB_REPO_TOKEN` | Fine-grained PAT, 이 저장소만, Contents: Read and write |
 
+사이트 주소(`sitemap`·`RSS`·OG 태그)는 따로 설정하지 않아도 된다.
+Vercel 이 넣어주는 `VERCEL_PROJECT_PRODUCTION_URL` 을 쓰고, 커스텀 도메인을 붙이면
+자동으로 그 값이 된다. 덮어써야 할 때만 `SITE_URL` 을 지정한다.
+
 OAuth 앱의 callback URL은 로컬이 `http://localhost:3000/api/auth/callback`,
 프로덕션이 `https://blog.subbi.dev/api/auth/callback` 이다. 서로 다르므로 앱을 두 개 만드는 편이 편하다.
 
