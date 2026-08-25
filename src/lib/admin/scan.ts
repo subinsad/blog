@@ -2,7 +2,9 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 
 export const CONTENT_ROOT = resolve(process.cwd(), 'content', 'posts')
-export const REPO_ROOT = resolve(process.cwd())
+// resolve(process.cwd()) 로 감싸면 Turbopack이 "동적 파일시스템 접근"으로 보고
+// 프로젝트 전체를 서버리스 번들에 끌어들인다. 그냥 cwd를 쓴다.
+export const REPO_ROOT = process.cwd()
 
 export type PostFile = {
   /** 저장소 기준 상대 경로 — 화면과 git 명령에 그대로 쓴다 */
