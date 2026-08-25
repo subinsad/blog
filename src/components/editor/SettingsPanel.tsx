@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { CATEGORIES, type Category } from '@/lib/site'
 import type { Draft } from '@/lib/editor/frontmatter'
+import { findSimilar, suggestTags, type KnownTag } from '@/lib/tags'
 
 const Row = ({ label, children, top }: { label: string; children: React.ReactNode; top?: boolean }) => (
   <div className={`mb-3 grid grid-cols-[64px_minmax(0,1fr)] gap-3 ${top ? 'items-start' : 'items-center'}`}>
@@ -19,19 +20,71 @@ export function SettingsPanel({
   onChange,
   seriesOptions,
   stats,
+  knownTags,
 }: {
   draft: Draft
   onChange: (patch: Partial<Draft>) => void
   seriesOptions: { id: string; title: string }[]
   stats: { chars: number; minutes: number }
+  knownTags: KnownTag[]
 }) {
   const [tagInput, setTagInput] = useState('')
+  const [highlight, setHighlight] = useState(0)
+  const [open, setOpen] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const addTag = () => {
-    const t = tagInput.trim().replace(/^#/, '')
-    if (!t || draft.tags.includes(t)) return setTagInput('')
+  const typed = tagInput.trim().replace(/^#/, '')
+
+  const suggestions = useMemo(
+    () => suggestTags(typed, knownTags, draft.tags),
+    [typed, knownTags, draft.tags],
+  )
+
+  /**
+   * 이미 있는 태그와 사실상 같은 이름인지 본다.
+   * 태그가 잘게 쪼개지는 원인이 바로 이 입력창의 자유 텍스트다.
+   */
+  const similar = typed
+    ? findSimilar(typed, knownTags.map((t) => t.name).filter((n) => !draft.tags.includes(n)))
+    : null
+
+  const commitTag = (name: string) => {
+    const t = name.trim().replace(/^#/, '')
+    if (!t || draft.tags.includes(t)) {
+      setTagInput('')
+      setOpen(false)
+      return
+    }
     onChange({ tags: [...draft.tags, t] })
     setTagInput('')
+    setHighlight(0)
+    setOpen(false)
+  }
+
+  const onTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (open && suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setHighlight((h) => (h + 1) % suggestions.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setHighlight((h) => (h - 1 + suggestions.length) % suggestions.length)
+        return
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        commitTag(suggestions[highlight]?.name ?? typed)
+        return
+      }
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      commitTag(typed)
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+    }
   }
 
   return (
@@ -65,18 +118,71 @@ export function SettingsPanel({
               </button>
             ))}
           </div>
-          <input
-            className={`${field} mt-1.5`}
-            placeholder="태그 입력 후 Enter"
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                addTag()
-              }
-            }}
-          />
+          <div className="relative">
+            <input
+              ref={inputRef}
+              className={`${field} mt-1.5`}
+              placeholder="태그 입력 후 Enter"
+              value={tagInput}
+              role="combobox"
+              aria-expanded={open && suggestions.length > 0}
+              aria-autocomplete="list"
+              aria-controls="tag-suggestions"
+              onChange={(e) => {
+                setTagInput(e.target.value)
+                setHighlight(0)
+                setOpen(true)
+              }}
+              onFocus={() => setOpen(true)}
+              onBlur={() => setTimeout(() => setOpen(false), 120)}
+              onKeyDown={onTagKeyDown}
+            />
+
+            {open && suggestions.length > 0 && (
+              <ul
+                id="tag-suggestions"
+                role="listbox"
+                className="absolute inset-x-0 top-[calc(100%+4px)] z-[70] max-h-[200px] overflow-y-auto rounded-lg border border-border bg-bg-elevated p-1"
+              >
+                {suggestions.map((t, i) => (
+                  <li key={t.name}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={i === highlight}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        commitTag(t.name)
+                      }}
+                      onMouseEnter={() => setHighlight(i)}
+                      className={[
+                        'flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-fg-body',
+                        i === highlight ? 'bg-bg-hover' : '',
+                      ].join(' ')}
+                    >
+                      <span className="min-w-0 flex-1 truncate">#{t.name}</span>
+                      <span className="shrink-0 text-[11px] text-fg-subtle tabular-nums">
+                        {t.count}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {similar && (
+            <p className="mt-1.5 text-[12px] leading-relaxed text-fg-muted">
+              <button
+                type="button"
+                onClick={() => commitTag(similar)}
+                className="font-medium text-accent hover:underline"
+              >
+                #{similar}
+              </button>{' '}
+              태그가 이미 있습니다. 같은 뜻이면 그걸 쓰세요.
+            </p>
+          )}
         </div>
       </Row>
 

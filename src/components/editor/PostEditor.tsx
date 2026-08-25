@@ -14,6 +14,7 @@ import { TextColor, BgColor } from '@/lib/editor/color-marks'
 import { SlashCommand } from '@/lib/editor/slash-extension'
 import { docToMarkdown } from '@/lib/editor/serialize'
 import { buildMdx, slugify, type Draft } from '@/lib/editor/frontmatter'
+import type { KnownTag } from '@/lib/tags'
 import { saveLocal, clearLocal, sinceLabel } from '@/lib/editor/local-draft'
 
 import { Toolbar } from './Toolbar'
@@ -39,10 +40,12 @@ export function PostEditor({
   initial,
   initialBody,
   seriesOptions,
+  knownTags,
 }: {
   initial: Draft
   initialBody: string
   seriesOptions: { id: string; title: string }[]
+  knownTags: KnownTag[]
 }) {
   const [draft, setDraft] = useState<Draft>(initial)
   const [slugTouched, setSlugTouched] = useState(Boolean(initial.slug))
@@ -313,7 +316,13 @@ export function PostEditor({
           )}
         </div>
 
-        <SettingsPanel draft={draft} onChange={patch} seriesOptions={seriesOptions} stats={stats} />
+        <SettingsPanel
+          draft={draft}
+          onChange={patch}
+          seriesOptions={seriesOptions}
+          stats={stats}
+          knownTags={knownTags}
+        />
       </div>
 
       <BubbleMenu editor={editor} className="flex h-9 items-center gap-0.5 rounded-lg border border-border bg-bg-elevated px-1">
