@@ -21,8 +21,19 @@ jobs:
       contents: read
     outputs:
       final_message: ${{ steps.codex.outputs.final-message }}
+    env:
+      # 시크릿이 없으면 리뷰를 건너뛴다. 매 PR마다 빨간 체크가 뜨면
+      # CI 자체를 안 보게 되므로, 미설정은 실패가 아니라 skip이어야 한다.
+      HAS_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
     steps:
+      - name: 시크릿 미설정 시 안내
+        if: env.HAS_KEY != 'true'
+        run: |
+          echo "::notice::OPENAI_API_KEY 가 없어 Codex 리뷰를 건너뜁니다."
+          echo "설정 방법은 .github/codex/README.md 참고"
+
       - name: Check out pull request merge commit
+        if: env.HAS_KEY == 'true'
         uses: actions/checkout@v5
         with:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
@@ -31,6 +42,7 @@ jobs:
 
       - name: Run Codex reviewer
         id: codex
+        if: env.HAS_KEY == 'true'
         uses: openai/codex-action@v1
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
