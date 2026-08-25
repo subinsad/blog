@@ -1,3 +1,15 @@
 # Codex is intentionally configured as a read-only reviewer for this repository.
-# Claude Code remains the implementation agent.
+# Claude Code remains the implementation agent; Codex only reports findings.
+#
+# `:read-only` is a built-in permission profile: the model may read the workspace and run
+# read-only commands, but cannot write files, and cannot escalate via approvals.
 default_permissions = ":read-only"
+
+# Never auto-approve an escalation. In CI there is nobody to ask, so the run fails loudly
+# instead of silently gaining write access.
+approval_policy = "never"
+
+[agents]
+# Reviewing is a single-threaded job. Keep the reviewer from fanning out into a swarm.
+max_threads = 1
+max_depth = 1
