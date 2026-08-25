@@ -14,6 +14,7 @@ import { TextColor, BgColor } from '@/lib/editor/color-marks'
 import { SlashCommand } from '@/lib/editor/slash-extension'
 import { docToMarkdown } from '@/lib/editor/serialize'
 import { buildMdx, slugify, type Draft } from '@/lib/editor/frontmatter'
+import { saveLocal, clearLocal, sinceLabel } from '@/lib/editor/local-draft'
 
 import { Toolbar } from './Toolbar'
 import { SlashMenu, type SlashMenuState } from './SlashMenu'
@@ -22,7 +23,13 @@ import { SettingsPanel } from './SettingsPanel'
 import { Popover } from './Popover'
 import { ColorPicker } from './ColorPicker'
 
-type SaveState = { kind: 'idle' | 'saving' | 'saved' | 'error'; message?: string }
+type SaveState =
+  | { kind: 'clean' }
+  /** 브라우저에만 있고 저장소에는 아직 없음 */
+  | { kind: 'local'; at: number }
+  | { kind: 'saving' }
+  | { kind: 'saved'; at: number; commitUrl?: string }
+  | { kind: 'error'; message: string }
 
 const EMPTY_SLASH: SlashMenuState = {
   open: false, items: [], index: 0, rect: null, command: () => {},
@@ -39,7 +46,7 @@ export function PostEditor({
 }) {
   const [draft, setDraft] = useState<Draft>(initial)
   const [slugTouched, setSlugTouched] = useState(Boolean(initial.slug))
-  const [save, setSave] = useState<SaveState>({ kind: 'idle' })
+  const [save, setSave] = useState<SaveState>({ kind: 'clean' })
   const [slash, setSlash] = useState<SlashMenuState>(EMPTY_SLASH)
   const [blockMenu, setBlockMenu] = useState<{ left: number; top: number } | null>(null)
   const [raw, setRaw] = useState<string | null>(null)
@@ -88,45 +95,71 @@ export function PostEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, version])
 
-  const persist = useCallback(async () => {
-    const d = latest.current
-    const md = editor ? docToMarkdown(editor.getJSON()) : ''
-    if (!d.slug) return
-    setSave({ kind: 'saving' })
-    try {
-      const res = await fetch('/api/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...d, body: md }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? '저장 실패')
-      setSave({ kind: 'saved' })
-    } catch (e) {
-      setSave({ kind: 'error', message: e instanceof Error ? e.message : '저장 실패' })
-    }
-  }, [editor])
+  /** 저장소에 쓴다. 사람이 저장·발행을 눌렀을 때만 호출된다. */
+  const commit = useCallback(
+    async (override?: Partial<Draft>) => {
+      const d = { ...latest.current, ...override }
+      const md = editor ? docToMarkdown(editor.getJSON()) : ''
+      if (!d.slug) {
+        setSave({ kind: 'error', message: 'slug이 필요합니다' })
+        return
+      }
+      setSave({ kind: 'saving' })
+      try {
+        const res = await fetch('/api/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...d, body: md }),
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? '저장 실패')
+        clearLocal(d.slug)
+        setSave({ kind: 'saved', at: Date.now(), commitUrl: json.commit?.url })
+      } catch (e) {
+        setSave({ kind: 'error', message: e instanceof Error ? e.message : '저장 실패' })
+      }
+    },
+    [editor],
+  )
 
-  /** 입력이 멈추고 3초 뒤 저장. (DESIGN.md §13.12) */
-  const scheduleSave = useCallback(() => {
+  /**
+   * 타이핑 중에는 브라우저에만 쌓는다. 네트워크로 나가지 않는다.
+   * 프로덕션에서 저장은 곧 커밋이라, 3초 debounce로 커밋하면 글 하나에
+   * 커밋이 수십 개 쌓이고 히스토리가 못 쓰게 된다.
+   */
+  const scheduleLocal = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(persist, 3000)
-  }, [persist])
+    timer.current = setTimeout(() => {
+      const d = latest.current
+      const md = editor ? docToMarkdown(editor.getJSON()) : ''
+      saveLocal(d.slug, d, md)
+      setSave({ kind: 'local', at: Date.now() })
+    }, 600)
+  }, [editor])
 
   useEffect(() => {
     if (!editor) return
     const onUpdate = () => {
       setVersion((v) => v + 1)
-      setSave((s) => (s.kind === 'saving' ? s : { kind: 'idle' }))
-      scheduleSave()
+      scheduleLocal()
     }
     editor.on('update', onUpdate)
     return () => {
       editor.off('update', onUpdate)
     }
-  }, [editor, scheduleSave])
+  }, [editor, scheduleLocal])
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
+
+  /** 저장소에 없는 변경을 들고 탭을 닫으려 하면 막는다. */
+  const uncommitted = save.kind === 'local' || save.kind === 'error'
+  useEffect(() => {
+    if (!uncommitted) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [uncommitted])
+
 
   const patch = (p: Partial<Draft>) => {
     setDraft((d) => {
@@ -134,12 +167,12 @@ export function PostEditor({
       if ('slug' in p) setSlugTouched(true)
       return next
     })
-    scheduleSave()
+    scheduleLocal()
   }
 
   const setTitle = (title: string) => {
     setDraft((d) => ({ ...d, title, slug: slugTouched ? d.slug : slugify(title) }))
-    scheduleSave()
+    scheduleLocal()
   }
 
   // 우클릭 → 블록 메뉴. ⇧+우클릭이면 브라우저 기본 메뉴를 통과시킨다
@@ -162,7 +195,7 @@ export function PostEditor({
       if (!(e.metaKey || e.ctrlKey)) return
       if (e.key === 's') {
         e.preventDefault()
-        void persist()
+        void commit()
       } else if (e.key === '/') {
         e.preventDefault()
         setRaw((r) => (r === null ? buildMdx({ ...latest.current, body: editor ? docToMarkdown(editor.getJSON()) : '' }) : null))
@@ -170,13 +203,24 @@ export function PostEditor({
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [persist, editor])
+  }, [commit, editor])
 
-  const status =
-    save.kind === 'saving' ? '저장 중…'
-    : save.kind === 'saved' ? '저장됨'
-    : save.kind === 'error' ? `저장 실패 — ${save.message}`
-    : draft.slug ? '변경됨' : 'slug이 필요합니다'
+  const status = (() => {
+    switch (save.kind) {
+      case 'saving':
+        return { text: '저장 중…', tone: 'muted' as const }
+      case 'saved':
+        return { text: `저장소에 저장됨 · ${sinceLabel(save.at)}`, tone: 'muted' as const }
+      case 'local':
+        // 브라우저에만 있다는 걸 분명히 해야 한다. 저장됐다고 믿고 탭을 닫으면 잃는다.
+        return { text: '브라우저에만 저장됨', tone: 'warn' as const }
+      case 'error':
+        return { text: save.message, tone: 'error' as const }
+      default:
+        return { text: draft.slug ? '' : 'slug이 필요합니다', tone: 'muted' as const }
+    }
+  })()
+
 
   if (!editor) return <div className="p-14 text-sm text-fg-muted">에디터를 불러오는 중…</div>
 
@@ -193,16 +237,37 @@ export function PostEditor({
             </svg>
             나가기
           </Link>
-          <span
-            className={`ml-auto text-xs tabular-nums ${save.kind === 'error' ? 'text-[#e03131]' : 'text-fg-subtle'}`}
-            aria-live="polite"
-          >
-            {status}
+          <span className="ml-auto flex items-center gap-2" aria-live="polite">
+            {save.kind === 'local' && (
+              <span className="size-1.5 rounded-full bg-[var(--m-orange)]" aria-hidden="true" />
+            )}
+            <span
+              className={
+                status.tone === 'error'
+                  ? 'text-xs text-[var(--m-red)]'
+                  : status.tone === 'warn'
+                    ? 'text-xs text-fg-muted'
+                    : 'text-xs text-fg-subtle'
+              }
+            >
+              {status.text}
+            </span>
+            {save.kind === 'saved' && save.commitUrl && (
+              <a
+                href={save.commitUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-[11px] text-accent hover:underline"
+              >
+                커밋 보기
+              </a>
+            )}
           </span>
           <button
             type="button"
-            onClick={() => void persist()}
-            className="h-[34px] rounded-lg border border-border-strong px-3.5 text-[13px] font-medium text-fg-body hover:bg-bg-hover"
+            onClick={() => void commit()}
+            disabled={save.kind === 'saving'}
+            className="h-[34px] rounded-lg border border-border-strong px-3.5 text-[13px] font-medium text-fg-body hover:bg-bg-hover disabled:opacity-50"
           >
             저장
           </button>
@@ -210,9 +275,10 @@ export function PostEditor({
             type="button"
             onClick={() => {
               patch({ draft: false })
-              void persist()
+              void commit({ draft: false })
             }}
-            className="h-[34px] rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-hover"
+            disabled={save.kind === 'saving'}
+            className="h-[34px] rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             발행
           </button>

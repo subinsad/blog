@@ -1,5 +1,6 @@
-import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises'
-import { join, resolve, sep } from 'node:path'
+import { readFile, readdir } from 'node:fs/promises'
+import { join, relative, resolve, sep } from 'node:path'
+import { writeFiles, usesGitHub, listPosts } from '@/lib/storage'
 import { requireOwner, unauthorized } from '@/lib/auth/require'
 import { buildMdx, isCategory, type Draft } from '@/lib/editor/frontmatter'
 
@@ -53,10 +54,15 @@ export async function POST(req: Request) {
   }
 
   try {
+    // slug 검증을 먼저 태운다. 경로 조합은 그 뒤에만 한다.
     const dir = safeDir(date.slice(0, 4), slug)
-    await mkdir(dir, { recursive: true })
-    await writeFile(join(dir, 'index.mdx'), buildMdx(draft), 'utf8')
-    return Response.json({ ok: true, path: `content/posts/${date.slice(0, 4)}/${slug}/index.mdx` })
+    const path = relative(process.cwd(), join(dir, 'index.mdx'))
+    const message = draft.draft
+      ? `draft: ${draft.title || slug}`
+      : `post: ${draft.title || slug}`
+
+    const { commit } = await writeFiles([{ path, content: buildMdx(draft) }], message)
+    return Response.json({ ok: true, path, commit })
   } catch (e) {
     return Response.json(
       { error: e instanceof Error ? e.message : '저장 실패' },
@@ -72,6 +78,13 @@ export async function GET(req: Request) {
   if (!slug) return Response.json({ error: 'slug이 필요합니다' }, { status: 400 })
 
   try {
+    if (usesGitHub) {
+      // 연도 폴더를 추측하지 않는다. 저장소 목록에서 slug로 찾는다.
+      const hit = (await listPosts()).find((f) => f.slug === slug)
+      if (!hit) return Response.json({ error: '글을 찾을 수 없습니다' }, { status: 404 })
+      return Response.json({ ok: true, raw: hit.raw, year: hit.path.split('/')[2] ?? '' })
+    }
+
     const years = await readdir(CONTENT_ROOT)
     for (const year of years) {
       try {

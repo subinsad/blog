@@ -131,10 +131,36 @@ export function PlanPanel({
 }
 
 /** 실행 후 남기는 결과 줄. 토스트는 사라지는데 그 안에 되돌리는 방법이 들어간다. */
-export function ResultStrip({ written }: { written: string[] }) {
+export function ResultStrip({
+  written,
+  commit,
+}: {
+  written: string[]
+  commit?: { sha: string; url: string }
+}) {
   const [copied, setCopied] = useState(false)
   // git checkout . 이 아니라 건드린 파일만 지정한다. 다른 초안을 날리지 않기 위해서다.
   const cmd = `git checkout -- ${written.map((p) => `'${p}'`).join(' ')}`
+
+  // 프로덕션은 커밋으로 쓰므로 로컬 되돌리기 명령이 의미가 없다. 커밋을 보여준다.
+  if (commit) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-border bg-bg-subtle px-4 py-3">
+        <p className="text-[13px] text-fg-body">
+          글 {written.length}개를 수정하고 커밋했습니다.
+        </p>
+        <a
+          href={commit.url}
+          target="_blank"
+          rel="noreferrer"
+          className="ml-auto font-mono text-[11px] text-accent hover:underline"
+        >
+          {commit.sha.slice(0, 7)}
+        </a>
+        <span className="text-[11px] text-fg-subtle">사이트 반영까지 1~2분</span>
+      </div>
+    )
+  }
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-bg-subtle px-4 py-3">
