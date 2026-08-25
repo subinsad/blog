@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { devOnlyPage } from '@/lib/editor/dev-only'
 import { seriesList } from '@/lib/content'
 import { PostEditor } from '@/components/editor/PostEditor'
 import { emptyDraft } from '@/lib/editor/frontmatter'
@@ -7,7 +6,6 @@ import { emptyDraft } from '@/lib/editor/frontmatter'
 export const metadata: Metadata = { title: '글쓰기' }
 
 export default function WritePage() {
-  devOnlyPage()
   return (
     <PostEditor
       initial={emptyDraft()}

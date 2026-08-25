@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { loadPosts } from '@/lib/admin/scan'
+import { loadPosts } from '@/lib/admin/posts'
 import { buildFindings, tagCounts } from '@/lib/admin/findings'
 import { CATEGORY_META, type Category } from '@/lib/site'
 import { formatDate } from '@/lib/format'

@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { devOnlyPage } from '@/lib/editor/dev-only'
 import { posts, seriesList } from '@/lib/content'
 import { splitMdx, type Draft } from '@/lib/editor/frontmatter'
 import { PostEditor } from '@/components/editor/PostEditor'
@@ -15,7 +14,6 @@ export default async function EditPage({
 }: {
   params: Promise<{ slug: string }>
 }) {
-  devOnlyPage()
   const { slug } = await params
   const post = posts.find((p) => p.slug === slug)
   if (!post) notFound()

@@ -1,4 +1,4 @@
-import { loadPosts } from '@/lib/admin/scan'
+import { loadPosts } from '@/lib/admin/posts'
 import { tagCounts, similarTagPairs, HIDE_BELOW } from '@/lib/admin/findings'
 import { TagsClient, type TagRow } from '@/components/admin/TagsClient'
 

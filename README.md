@@ -84,6 +84,48 @@ pinned: false
 뷰 전환은 클라이언트에서만 읽는다. 서버 컴포넌트에서 `searchParams`를 읽으면
 목록 페이지가 전부 동적 렌더링으로 떨어지기 때문이다.
 
+## 인증 설정
+
+`/write` 와 `/admin` 은 소유자의 GitHub 계정으로만 열린다. 미들웨어가 세션을 확인하고,
+API 핸들러가 한 번 더 확인한다.
+
+`.env.example` 을 `.env.local` 로 복사한 뒤 채운다.
+
+```bash
+cp .env.example .env.local
+```
+
+| 변수 | 얻는 곳 |
+| --- | --- |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | github.com/settings/developers → New OAuth App |
+| `GITHUB_OWNER_ID` | `curl -s https://api.github.com/users/<아이디> \| grep '"id"'` |
+| `AUTH_SECRET` | `openssl rand -base64 32` |
+| `GITHUB_REPO_TOKEN` | Fine-grained PAT, 이 저장소만, Contents: Read and write |
+
+OAuth 앱의 callback URL은 로컬이 `http://localhost:3000/api/auth/callback`,
+프로덕션이 `https://blog.subbi.dev/api/auth/callback` 이다. 서로 다르므로 앱을 두 개 만드는 편이 편하다.
+
+### 왜 토큰을 둘로 나누는가
+
+로그인은 **신원 확인만** 한다. OAuth 스코프가 `read:user` 뿐이라, 세션 쿠키가 새어도
+그것으로는 저장소를 건드릴 수 없다. 저장소 쓰기는 서버 환경변수의 별도 토큰으로만 일어난다.
+
+계정 대조는 사용자명이 아니라 **숫자 ID**로 한다. 사용자명은 바꿀 수 있고,
+놓아버린 이름은 다른 사람이 가져갈 수 있다.
+
+## 저장 방식
+
+| | 개발 | 프로덕션 |
+| --- | --- | --- |
+| 글 저장 | `content/posts/**` 에 직접 쓰기 | 저장소에 커밋 |
+| 반영 | 즉시 (velite watch) | 커밋 → Vercel 재빌드 (1~2분) |
+
+Vercel의 파일시스템은 읽기 전용이고 요청마다 사라진다. 프로덕션에서 글을 저장한다는 건
+곧 저장소에 커밋한다는 뜻이다.
+
+여러 파일을 고치는 작업(태그 병합 등)은 Git Data API로 **커밋 하나**에 묶는다.
+Contents API는 파일당 커밋 하나라서 중간에 실패하면 절반만 반영된 상태가 남는다.
+
 ## 기여 · 리뷰
 
 `main`에 직접 푸시하지 않는다. 브랜치 → PR → 리뷰 → 머지.
