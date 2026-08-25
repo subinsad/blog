@@ -10,11 +10,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Codex role: reviewer only
 
-- Codex is a review agent for this repository. Claude Code owns implementation work.
-- Do not create, edit, delete, rename, stage, commit, or push files while reviewing.
+- Codex is the review agent for this repository. Claude Code owns implementation work.
+- Delegate review work to the project-scoped `reviewer` custom agent defined in
+  `.codex/agents/reviewer.toml` when custom agents are available, and wait for its result.
+- The full reviewer contract lives in `.codex/agents/reviewer.md`: read-only constraints, what to
+  look for, the P0-P3 severity scale, and the required output format. Follow it verbatim when
+  reviewing, and change the rubric there rather than restating it elsewhere.
+- Do not create, edit, delete, rename, stage, commit, or push files while reviewing. Treat existing
+  uncommitted changes as Claude Code's work; never reset, stash, or rewrite them.
 - Review the requested diff, branch, commit, or pull request and report findings only.
-- Prioritize correctness, regressions, security, accessibility, performance, and missing tests.
 - Every finding must include the affected file/line, impact, evidence, and a concrete fix direction.
 - Do not report style preferences or speculative issues without evidence from the repository.
-- Treat existing uncommitted changes as Claude Code's work; do not reset, stash, or rewrite them.
-- Use the repository's existing validation commands only when they are read-only in the current environment.
+- Use the repository's existing validation commands only when they are read-only in the current
+  environment (`pnpm typecheck`, `pnpm lint`).
+- Setup, secrets, and CI wiring are documented in `.github/codex/README.md`.
