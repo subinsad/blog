@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { site } from '@/lib/site'
-import { OwnerLink } from './OwnerLink'
+import { OwnerMenu } from './OwnerMenu'
 import { ThemeToggle } from './ThemeToggle'
 
 export function Header() {
@@ -29,7 +29,7 @@ export function Header() {
             </kbd>
           </Link>
 
-          <OwnerLink />
+          <OwnerMenu />
 
           <ThemeToggle />
         </div>
