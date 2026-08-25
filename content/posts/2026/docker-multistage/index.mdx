@@ -1,0 +1,24 @@
+---
+title: Docker 멀티스테이지 빌드로 이미지 70% 줄이기
+date: 2026-08-14
+category: DevOps
+tags: [Docker]
+summary: 레이어 캐시 동작을 이해하고 나니 빌드 시간도 절반이 됐다
+---
+
+빌드 산출물만 최종 이미지에 남기면 크기가 극적으로 줄어든다.
+
+```dockerfile title="Dockerfile"
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm i --frozen-lockfile
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+CMD ["node", "server.js"]
+```
+
+핵심은 `COPY package.json` 을 소스 복사보다 **먼저** 두는 것이다. 소스가 바뀌어도 의존성 레이어 캐시가 살아남는다.

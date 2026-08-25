@@ -1,0 +1,31 @@
+---
+title: Next.js App Router에서 MDX 파이프라인 만들기
+date: 2026-08-25
+category: Frontend
+tags: [Next.js, MDX, velite]
+series: nextjs-blog
+seriesOrder: 1
+summary: contentlayer가 멈춘 뒤 velite로 옮기며 정리한 빌드타임 타입 안전 파이프라인
+pinned: true
+---
+
+contentlayer가 유지보수를 멈춘 뒤로 대안을 찾다가 velite에 정착했다. 빌드타임에 frontmatter를 타입 안전하게 다룬다는 점은 같은데, 설정이 훨씬 단순하다.
+
+## 왜 옮겼나
+
+가장 큰 이유는 번들러 결합이었다. contentlayer는 webpack 플러그인에 강하게 묶여 있어서 turbopack으로 넘어가는 순간 막힌다.
+
+velite는 아예 별도 CLI로 돈다. `velite`가 `content/`를 읽어 `.velite/`에 JSON과 타입을 뱉고, Next는 그 결과물을 그냥 import한다. 번들러가 무엇이든 상관이 없다.
+
+```ts title="velite.config.ts"
+export default defineConfig({
+  root: 'content',
+  collections: { posts, series },
+})
+```
+
+## 스키마가 곧 계약이다
+
+`s.enum(CATEGORIES)`로 카테고리를 못 박아두면 오타가 빌드 타임에 잡힌다. 카테고리를 5~7개로 유지하겠다는 결정이 문서가 아니라 코드로 강제된다.
+
+> 정보구조를 지키는 가장 확실한 방법은 어기면 빌드가 깨지게 만드는 것이다.

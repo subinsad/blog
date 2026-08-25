@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# velite 산출물 (빌드 시 생성)
+/.velite
+/public/static
+
+# 로컬 프로토타입 산출물은 유지, 에디터 초안만 제외
+/content/**/*.draft.mdx

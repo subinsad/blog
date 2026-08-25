@@ -1,0 +1,3 @@
+# Codex is intentionally configured as a read-only reviewer for this repository.
+# Claude Code remains the implementation agent.
+default_permissions = ":read-only"

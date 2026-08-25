@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: 타입 · 린트 · 빌드
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile
+
+      - name: 콘텐츠 빌드
+        run: pnpm content
+
+      - name: 타입 체크
+        run: pnpm typecheck
+
+      - name: 린트
+        run: pnpm lint
+
+      - name: 프로덕션 빌드
+        run: pnpm build
+
+      # DESIGN.md §13.2 — 에디터가 프로덕션에 유출되면 누구나 글을 쓸 수 있다
+      - name: 에디터가 프로덕션 번들에 포함되지 않았는지 확인
+        run: |
+          if grep -rl "write" .next/server/app --include="*.html" 2>/dev/null | grep -q "write"; then
+            echo "::error::/write 라우트가 프로덕션 빌드에 포함되었습니다"
+            exit 1
+          fi
+          echo "OK — 에디터 라우트 없음"

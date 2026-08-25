@@ -1,0 +1,9 @@
+# 기본 리뷰어
+*                   @subinsad
+
+# 설계 문서는 변경 시 항상 확인
+/docs/              @subinsad
+
+# 콘텐츠 파이프라인과 CI는 깨지면 전체가 멈춤
+/velite.config.ts   @subinsad
+/.github/           @subinsad

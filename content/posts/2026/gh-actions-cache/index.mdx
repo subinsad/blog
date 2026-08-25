@@ -1,0 +1,18 @@
+---
+title: GitHub Actions 캐시로 CI 4분 단축하기
+date: 2026-07-15
+category: DevOps
+tags: [CI]
+summary: pnpm store와 Next.js 빌드 캐시를 어디에 어떻게 걸어야 하는지
+---
+
+캐시 키를 잘못 잡으면 매번 미스가 나서 오히려 느려진다.
+
+```yaml title=".github/workflows/ci.yml"
+- uses: actions/cache@v4
+  with:
+    path: ~/.local/share/pnpm/store
+    key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+```
+
+락파일 해시를 키로 쓰는 게 핵심이다. 브랜치명이나 커밋 SHA를 넣으면 절대 히트하지 않는다.
