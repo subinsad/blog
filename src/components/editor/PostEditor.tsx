@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
@@ -21,6 +22,7 @@ import { Toolbar } from './Toolbar'
 import { SlashMenu, type SlashMenuState } from './SlashMenu'
 import { BlockMenu } from './BlockMenu'
 import { SettingsPanel } from './SettingsPanel'
+import { PublishOverlay } from './PublishOverlay'
 import { Popover } from './Popover'
 import { ColorPicker } from './ColorPicker'
 
@@ -57,6 +59,8 @@ export function PostEditor({
   const [bubbleColor, setBubbleColor] = useState(false)
   // 에디터 내용이 바뀔 때마다 올려서 파생값(글자 수 등)을 다시 계산시킨다
   const [version, setVersion] = useState(0)
+  const [published, setPublished] = useState<{ slug: string; commitUrl?: string } | null>(null)
+  const router = useRouter()
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // 저장 타이머가 최신 draft를 읽어야 한다. 렌더 중에 ref를 쓰면 안 되므로 이펙트로 동기화한다.
@@ -105,7 +109,7 @@ export function PostEditor({
       const md = editor ? docToMarkdown(editor.getJSON()) : ''
       if (!d.slug) {
         setSave({ kind: 'error', message: 'slug이 필요합니다' })
-        return
+        return null
       }
       setSave({ kind: 'saving' })
       try {
@@ -118,8 +122,10 @@ export function PostEditor({
         if (!res.ok) throw new Error(json.error ?? '저장 실패')
         clearLocal(d.slug)
         setSave({ kind: 'saved', at: Date.now(), commitUrl: json.commit?.url })
+        return { slug: d.slug, commitUrl: json.commit?.url as string | undefined }
       } catch (e) {
         setSave({ kind: 'error', message: e instanceof Error ? e.message : '저장 실패' })
+        return null
       }
     },
     [editor],
@@ -276,9 +282,10 @@ export function PostEditor({
           </button>
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               patch({ draft: false })
-              void commit({ draft: false })
+              const r = await commit({ draft: false })
+              if (r) setPublished(r)
             }}
             disabled={save.kind === 'saving'}
             className="h-[34px] rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
@@ -365,6 +372,15 @@ export function PostEditor({
         <Popover anchor={colorAnchor} width={220} onClose={() => setBubbleColor(false)}>
           <ColorPicker editor={editor} onDone={() => setBubbleColor(false)} />
         </Popover>
+      )}
+
+      {published && (
+        <PublishOverlay
+          slug={published.slug}
+          commitUrl={published.commitUrl}
+          onNavigate={() => router.push(`/posts/${published.slug}`)}
+          onDismiss={() => setPublished(null)}
+        />
       )}
 
       <SlashMenu state={slash} />

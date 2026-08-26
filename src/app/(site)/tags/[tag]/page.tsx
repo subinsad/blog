@@ -8,7 +8,7 @@ import { PostListSection } from '@/components/post/PostListSection'
 export const dynamicParams = false
 
 export function generateStaticParams() {
-  return tagCounts().map(([tag]) => ({ tag: encodeURIComponent(tag) }))
+  return tagCounts().map(([tag]) => ({ tag }))
 }
 
 export async function generateMetadata({

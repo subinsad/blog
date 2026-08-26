@@ -3,14 +3,16 @@ import { join, relative, resolve, sep } from 'node:path'
 import { writeFiles, usesGitHub, listPosts } from '@/lib/storage'
 import { requireOwner, unauthorized } from '@/lib/auth/require'
 import { buildMdx, isCategory, type Draft } from '@/lib/editor/frontmatter'
+import { isSafeSlug } from '@/lib/slugify'
 
 const CONTENT_ROOT = resolve(process.cwd(), 'content', 'posts')
 
 /** slug가 경로를 벗어나지 못하게 막는다. 사용자 입력이 그대로 파일 경로가 되는 자리다. */
 function safeDir(year: string, slug: string): string {
   if (!/^\d{4}$/.test(year)) throw new Error('연도 형식이 잘못되었습니다')
-  if (!/^[a-z0-9가-힣][a-z0-9가-힣-]*$/i.test(slug)) {
-    throw new Error('slug에는 영문·숫자·한글·하이픈만 쓸 수 있습니다')
+  // Next 16 은 비 ASCII slug 라우트를 매칭하지 못한다. 파일은 만들어지지만 404 가 된다.
+  if (!isSafeSlug(slug)) {
+    throw new Error('slug 에는 영문 소문자·숫자·하이픈만 쓸 수 있습니다')
   }
   const dir = resolve(CONTENT_ROOT, year, slug)
   if (dir !== CONTENT_ROOT && !dir.startsWith(CONTENT_ROOT + sep)) {
