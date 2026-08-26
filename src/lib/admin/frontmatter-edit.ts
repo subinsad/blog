@@ -29,7 +29,7 @@ export const yamlList = (items: string[]) =>
   `[${items.map(yamlScalar).join(', ')}]`
 
 /** 해당 필드가 차지하는 줄 범위를 찾는다. 블록 리스트(- 로 시작하는 여러 줄)도 포함. */
-function findField(lines: string[], field: AnyField) {
+export function fieldLines(lines: string[], field: string) {
   const head = new RegExp(`^${field}\\s*:`)
   const start = lines.findIndex((l) => head.test(l))
   if (start === -1) return null
@@ -41,6 +41,8 @@ function findField(lines: string[], field: AnyField) {
   }
   return { start, end }
 }
+
+const findField = (lines: string[], field: AnyField) => fieldLines(lines, field)
 
 export function readField(raw: string, field: FieldName): string | null {
   const fm = splitFrontmatter(raw)

@@ -11,6 +11,20 @@ import type { Plan } from '@/lib/admin/plan'
  * - 변경되지 않는 글도 이유와 함께 보여준다. 숫자가 안 맞아 보이면 못 누른다.
  * - 확인 버튼에 목적어와 개수를 넣는다. "확인" 아님.
  */
+type Changes = Plan['changes']
+
+/** 확인 버튼과 결과 줄에 쓰는 목적어. 무엇을 누르는지 알아야 누를 수 있다. */
+function subject(changes: Changes): string {
+  return changes.every((c) => c.path.startsWith('content/posts/')) ? '글' : '파일'
+}
+
+function confirmLabel(changes: Changes): string {
+  const n = changes.length
+  if (n > 0 && changes.every((c) => c.op === 'create')) return `파일 ${n}개 만들기`
+  if (n > 0 && changes.every((c) => c.op === 'delete')) return `파일 ${n}개 지우기`
+  return `${subject(changes)} ${n}개 수정`
+}
+
 export function PlanPanel({
   plan,
   busy,
@@ -123,7 +137,7 @@ export function PlanPanel({
           disabled={busy || empty}
           className="h-[34px] rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
         >
-          {busy ? '적용 중…' : `글 ${plan.changes.length}개 수정`}
+          {busy ? '적용 중…' : confirmLabel(plan.changes)}
         </button>
       </div>
     </div>
@@ -132,23 +146,35 @@ export function PlanPanel({
 
 /** 실행 후 남기는 결과 줄. 토스트는 사라지는데 그 안에 되돌리는 방법이 들어간다. */
 export function ResultStrip({
+  plan,
   written,
   commit,
 }: {
+  plan: Plan
   written: string[]
   commit?: { sha: string; url: string }
 }) {
   const [copied, setCopied] = useState(false)
+
+  const quote = (paths: string[]) => paths.map((p) => `'${p}'`).join(' ')
+  // 없던 파일은 checkout 으로 되돌아오지 않는다. 지워야 한다.
+  const created = plan.changes.filter((c) => c.op === 'create').map((c) => c.path)
+  const restored = written.filter((p) => !created.includes(p))
   // git checkout . 이 아니라 건드린 파일만 지정한다. 다른 초안을 날리지 않기 위해서다.
-  const cmd = `git checkout -- ${written.map((p) => `'${p}'`).join(' ')}`
+  const cmd = [
+    restored.length > 0 ? `git checkout -- ${quote(restored)}` : '',
+    created.length > 0 ? `rm ${quote(created)}` : '',
+  ]
+    .filter(Boolean)
+    .join(' && ')
+
+  const done = `${subject(plan.changes)} ${written.length}개`
 
   // 프로덕션은 커밋으로 쓰므로 로컬 되돌리기 명령이 의미가 없다. 커밋을 보여준다.
   if (commit) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-border bg-bg-subtle px-4 py-3">
-        <p className="text-[13px] text-fg-body">
-          글 {written.length}개를 수정하고 커밋했습니다.
-        </p>
+        <p className="text-[13px] text-fg-body">{done}를 저장하고 커밋했습니다.</p>
         <a
           href={commit.url}
           target="_blank"
@@ -164,7 +190,7 @@ export function ResultStrip({
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-bg-subtle px-4 py-3">
-      <p className="text-[13px] text-fg-body">글 {written.length}개를 수정했습니다.</p>
+      <p className="text-[13px] text-fg-body">{done}를 저장했습니다.</p>
       <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-fg-subtle">{cmd}</code>
       <button
         type="button"

@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { editField, yamlList, yamlScalar, type AnyField, type FieldName } from './frontmatter-edit'
+import { buildSeriesYml, editSeriesYml, seriesPath, seriesUrl } from './series-file'
 import { REPO_ROOT, type PostMeta } from './scan'
 import { loadPosts } from './posts'
 import { writeFiles, usesGitHub, readRepoFile } from '@/lib/storage'
@@ -15,6 +16,8 @@ export type Change = {
   field: string
   before: string
   after: string
+  /** 파일에 무엇을 하는지. 되돌리는 명령이 달라진다. */
+  op?: 'create' | 'update' | 'delete'
   /** 실제로 쓸 파일 전체 내용. 클라이언트로 보내지 않는다. */
   nextRaw?: string
 }
@@ -44,6 +47,9 @@ export type Operation =
   | { kind: 'series.setOrder'; id: string; slugs: string[] }
   | { kind: 'series.addPosts'; id: string; slugs: string[] }
   | { kind: 'series.removePosts'; slugs: string[] }
+  | { kind: 'series.add'; id: string; title: string; description: string }
+  | { kind: 'series.edit'; id: string; title: string; description: string }
+  | { kind: 'series.delete'; id: string }
   | { kind: 'category.add'; name: string; slug: string; light: string; dark: string }
 
 /** 대상 파일들 중 워킹트리가 더러운 것. git이 undo인 도구에서 가장 중요한 경고다. */
@@ -221,14 +227,116 @@ async function planCategoryAdd(op: {
   }
 }
 
+/**
+ * 시리즈 만들기·고치기·지우기. 대상은 content/series/<id>.yml 파일 하나다.
+ *
+ * id 는 URL 이자 각 글의 frontmatter 에 박히는 값이라 만든 뒤에는 바꾸지
+ * 않는다. 바꾸려면 소속 글을 전부 고치고 옛 주소를 리다이렉트해야 한다.
+ */
+async function planSeriesAdd(op: {
+  id: string
+  title: string
+  description: string
+}): Promise<{ changes: Change[]; headline: string }> {
+  const path = seriesPath(op.id)
+  if ((await readRepoFile(path)) !== null) {
+    throw new Error(`이미 '${op.id}' 시리즈가 있습니다`)
+  }
+  const raw = buildSeriesYml(op.id, op.title, op.description)
+  return {
+    changes: [
+      {
+        path,
+        slug: op.id,
+        title: op.title,
+        field: '시리즈',
+        before: '(없음)',
+        after: raw.trimEnd(),
+        op: 'create',
+        nextRaw: raw,
+      },
+    ],
+    headline: `'${op.title}' 시리즈를 만듭니다`,
+  }
+}
+
+async function planSeriesEdit(op: {
+  id: string
+  title: string
+  description: string
+}): Promise<{ changes: Change[]; headline: string }> {
+  const path = seriesPath(op.id)
+  const raw = await readRepoFile(path)
+  if (raw === null) throw new Error(`'${op.id}' 시리즈를 찾을 수 없습니다`)
+
+  const edit = editSeriesYml(raw, { title: op.title, description: op.description })
+  const headline = `'${op.title}' 시리즈 정보를 고칩니다`
+  if (!edit) return { changes: [], headline }
+
+  return {
+    changes: [
+      {
+        path,
+        slug: op.id,
+        title: op.title,
+        field: edit.fields.join(' · '),
+        before: edit.before,
+        after: edit.after,
+        op: 'update',
+        nextRaw: edit.next,
+      },
+    ],
+    headline,
+  }
+}
+
+async function planSeriesDelete(
+  posts: PostMeta[],
+  id: string,
+): Promise<{ changes: Change[]; headline: string; deadUrls: string[] }> {
+  // 소속 글이 남아 있으면 지우지 않는다. 지우면 그 글들의 series 필드가
+  // 존재하지 않는 시리즈를 가리키게 되고, 글 페이지의 시리즈 내비가 깨진다.
+  const held = posts.filter((p) => p.series === id)
+  if (held.length > 0) {
+    throw new Error(`글 ${held.length}개가 아직 이 시리즈에 있습니다. 먼저 빼주세요.`)
+  }
+
+  const path = seriesPath(id)
+  const raw = await readRepoFile(path)
+  if (raw === null) throw new Error(`'${id}' 시리즈를 찾을 수 없습니다`)
+
+  return {
+    changes: [
+      {
+        path,
+        slug: id,
+        title: id,
+        field: '시리즈',
+        before: raw.trimEnd(),
+        after: '(삭제)',
+        op: 'delete',
+      },
+    ],
+    headline: `'${id}' 시리즈를 지웁니다`,
+    deadUrls: [seriesUrl(id)],
+  }
+}
+
 /** 무엇이 바뀌는지 한 줄로. 글 프론트매터와 설정 파일은 성격이 다르다. */
 function describe(changes: Change[]): string {
   if (changes.length === 0) return '변경할 내용이 없습니다'
   const fields = [...new Set(changes.map((c) => c.field))].join(' · ')
-  const isConfig = changes.every((c) => c.path.startsWith('src/'))
-  return isConfig
-    ? `설정 파일 ${changes.length}개 · ${fields}`
-    : `프론트매터 ${fields} 필드만 변경 · 파일 ${changes.length}개`
+  const every = (op: Change['op']) => changes.every((c) => c.op === op)
+
+  if (every('create')) return `파일 ${changes.length}개를 새로 만듭니다`
+  if (every('delete')) return `파일 ${changes.length}개를 지웁니다`
+  if (changes.every((c) => c.path.startsWith('src/'))) {
+    return `설정 파일 ${changes.length}개 · ${fields}`
+  }
+  if (changes.every((c) => c.path.startsWith('content/posts/'))) {
+    return `프론트매터 ${fields} 필드만 변경 · 파일 ${changes.length}개`
+  }
+  return `${fields} 변경 · 파일 ${changes.length}개`
 }
 
 /** 계획을 만든다. 파일은 건드리지 않는다. */
@@ -342,6 +450,25 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
       headline = `글 ${op.slugs.length}개를 시리즈에서 뺍니다`
       break
     }
+    case 'series.add': {
+      const r = await planSeriesAdd(op)
+      changes = r.changes
+      headline = r.headline
+      break
+    }
+    case 'series.edit': {
+      const r = await planSeriesEdit(op)
+      changes = r.changes
+      headline = r.headline
+      break
+    }
+    case 'series.delete': {
+      const r = await planSeriesDelete(posts, op.id)
+      changes = r.changes
+      headline = r.headline
+      deadUrls = r.deadUrls
+      break
+    }
     case 'category.add': {
       const { changes: c, headline: h } = await planCategoryAdd(op)
       changes = c
@@ -375,6 +502,7 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
       field: c.field,
       before: c.before,
       after: c.after,
+      op: c.op,
     })),
     skipped,
     dirty,
@@ -395,6 +523,7 @@ export async function applyPlan(
   if (changes.length === 0) return { written: [], plan }
 
   const files = changes.map((c) => {
+    if (c.op === 'delete') return { path: c.path, content: null }
     if (!c.nextRaw) throw new Error(`대상 파일을 찾을 수 없습니다: ${c.path}`)
     return { path: c.path, content: c.nextRaw }
   })
