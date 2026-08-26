@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { editField, yamlList, type FieldName } from './frontmatter-edit'
+import { editField, yamlList, yamlScalar, type FieldName } from './frontmatter-edit'
 import { REPO_ROOT, type PostMeta } from './scan'
 import { loadPosts } from './posts'
 import { writeFiles, usesGitHub } from '@/lib/storage'
@@ -34,6 +34,10 @@ export type Plan = {
 export type Operation =
   | { kind: 'tag.merge'; from: string[]; to: string }
   | { kind: 'tag.delete'; tag: string }
+  | { kind: 'post.addTag'; slugs: string[]; tag: string }
+  | { kind: 'post.removeTag'; slugs: string[]; tag: string }
+  | { kind: 'post.setCategory'; slugs: string[]; category: string }
+  | { kind: 'post.setPinned'; slugs: string[]; pinned: boolean }
 
 /** 대상 파일들 중 워킹트리가 더러운 것. git이 undo인 도구에서 가장 중요한 경고다. */
 async function dirtyFiles(paths: string[]): Promise<string[]> {
@@ -110,6 +114,45 @@ function planTagDelete(posts: PostMeta[], tag: string) {
   return changes
 }
 
+type BulkResult = { changes: Change[]; skipped: Skipped[] }
+
+/** 선택한 글들에 같은 변경을 적용한다. 이미 그 상태인 글은 이유와 함께 건너뛴다. */
+function planBulk(
+  posts: PostMeta[],
+  slugs: string[],
+  apply: (p: PostMeta) => { field: FieldName; line: string } | { skip: string } | null,
+): BulkResult {
+  const changes: Change[] = []
+  const skipped: Skipped[] = []
+
+  for (const p of posts) {
+    if (!slugs.includes(p.file.slug)) continue
+
+    const r = apply(p)
+    if (r === null) continue
+    if ('skip' in r) {
+      skipped.push({ slug: p.file.slug, title: p.title, reason: r.skip })
+      continue
+    }
+
+    const edit = editField(p.file.raw, r.field, { next: r.line })
+    if (!edit) {
+      skipped.push({ slug: p.file.slug, title: p.title, reason: '이미 같은 값' })
+      continue
+    }
+    changes.push({
+      path: p.file.path,
+      slug: p.file.slug,
+      title: p.title,
+      field: r.field,
+      before: edit.beforeLine,
+      after: edit.afterLine,
+      nextRaw: edit.next,
+    })
+  }
+  return { changes, skipped }
+}
+
 /** 계획을 만든다. 파일은 건드리지 않는다. */
 export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: Change[] }> {
   const posts = await loadPosts()
@@ -119,19 +162,70 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
   let headline = ''
   let deadUrls: string[] = []
 
-  if (op.kind === 'tag.merge') {
-    const r = planTagMerge(posts, op.from, op.to)
-    changes = r.changes
-    skipped = r.skipped
-    deadUrls = r.sources.map(tagUrl)
-    headline =
-      r.sources.length === 1
-        ? `'${r.sources[0]}' 태그를 '${op.to}' 로 바꿉니다`
-        : `태그 ${r.sources.length}개를 '${op.to}' 로 합칩니다`
-  } else {
-    changes = planTagDelete(posts, op.tag)
-    deadUrls = [tagUrl(op.tag)]
-    headline = `'${op.tag}' 태그를 삭제합니다`
+  const n = (op as { slugs?: string[] }).slugs?.length ?? 0
+
+  switch (op.kind) {
+    case 'tag.merge': {
+      const r = planTagMerge(posts, op.from, op.to)
+      changes = r.changes
+      skipped = r.skipped
+      deadUrls = r.sources.map(tagUrl)
+      headline =
+        r.sources.length === 1
+          ? `'${r.sources[0]}' 태그를 '${op.to}' 로 바꿉니다`
+          : `태그 ${r.sources.length}개를 '${op.to}' 로 합칩니다`
+      break
+    }
+    case 'tag.delete': {
+      changes = planTagDelete(posts, op.tag)
+      deadUrls = [tagUrl(op.tag)]
+      headline = `'${op.tag}' 태그를 삭제합니다`
+      break
+    }
+    case 'post.addTag': {
+      const r = planBulk(posts, op.slugs, (p) =>
+        p.tags.includes(op.tag)
+          ? { skip: `이미 '${op.tag}' 보유` }
+          : { field: 'tags', line: `tags: ${yamlList([...p.tags, op.tag])}` },
+      )
+      changes = r.changes
+      skipped = r.skipped
+      headline = `글 ${n}개에 '${op.tag}' 태그를 추가합니다`
+      break
+    }
+    case 'post.removeTag': {
+      const r = planBulk(posts, op.slugs, (p) =>
+        p.tags.includes(op.tag)
+          ? { field: 'tags', line: `tags: ${yamlList(p.tags.filter((t) => t !== op.tag))}` }
+          : { skip: `'${op.tag}' 없음` },
+      )
+      changes = r.changes
+      skipped = r.skipped
+      headline = `글 ${n}개에서 '${op.tag}' 태그를 뺍니다`
+      break
+    }
+    case 'post.setCategory': {
+      const r = planBulk(posts, op.slugs, (p) =>
+        p.category === op.category
+          ? { skip: '이미 같은 카테고리' }
+          : { field: 'category', line: `category: ${yamlScalar(op.category)}` },
+      )
+      changes = r.changes
+      skipped = r.skipped
+      headline = `글 ${n}개를 '${op.category}' 카테고리로 옮깁니다`
+      break
+    }
+    case 'post.setPinned': {
+      const r = planBulk(posts, op.slugs, (p) =>
+        p.pinned === op.pinned
+          ? { skip: op.pinned ? '이미 고정됨' : '이미 해제됨' }
+          : { field: 'pinned', line: `pinned: ${op.pinned}` },
+      )
+      changes = r.changes
+      skipped = r.skipped
+      headline = op.pinned ? `글 ${n}개를 고정합니다` : `글 ${n}개의 고정을 해제합니다`
+      break
+    }
   }
 
   const dirty = await dirtyFiles(changes.map((c) => c.path))
@@ -142,7 +236,7 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
     detail:
       changes.length === 0
         ? '변경할 내용이 없습니다'
-        : `프론트매터 tags 필드만 변경 · 파일 ${changes.length}개`,
+        : `프론트매터 ${[...new Set(changes.map((c) => c.field))].join(' · ')} 필드만 변경 · 파일 ${changes.length}개`,
     // nextRaw(파일 전체 내용)는 클라이언트로 보내지 않는다
     changes: changes.map((c) => ({
       path: c.path,
