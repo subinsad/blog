@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { authConfig } from '@/lib/auth/config'
-import { listTree, readBlob, commitFiles } from './github'
+import { listTree, readBlob, commitFiles, checkRepoAccess } from './github'
 import { scanPostFiles, REPO_ROOT, type PostFile } from '@/lib/admin/scan'
 
 /**
@@ -97,3 +97,9 @@ export const postPath = (year: string, slug: string) =>
   relative(REPO_ROOT, join(REPO_ROOT, 'content', 'posts', year, slug, 'index.mdx'))
 
 export const repoUrl = () => `https://github.com/${authConfig.repo}`
+
+/** 프로덕션에서만 의미가 있다. 로컬은 파일시스템에 직접 쓴다. */
+export async function checkStorage() {
+  if (!usesGitHub) return { ok: true as const, canWrite: true as const }
+  return checkRepoAccess()
+}

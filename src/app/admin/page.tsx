@@ -3,10 +3,12 @@ import { loadPosts } from '@/lib/admin/posts'
 import { buildFindings, tagCounts } from '@/lib/admin/findings'
 import { CATEGORY_META, type Category } from '@/lib/site'
 import { formatDate } from '@/lib/format'
+import { checkStorage } from '@/lib/storage'
 
 export default async function AdminOverview() {
   const posts = await loadPosts()
   const findings = buildFindings(posts)
+  const storage = await checkStorage()
   const series = new Set(posts.map((p) => p.series).filter(Boolean))
   const pinned = posts.filter((p) => p.pinned).length
 
@@ -16,6 +18,24 @@ export default async function AdminOverview() {
         글 {posts.length} · 카테고리 {new Set(posts.map((p) => p.category)).size} · 태그{' '}
         {tagCounts(posts).length} · 시리즈 {series.size} · 고정 {pinned}
       </p>
+
+      {!storage.ok && (
+        <div
+          role="alert"
+          className="mt-6 rounded-lg border-l-[3px] border-[var(--m-red)] bg-[color-mix(in_srgb,var(--m-red)_7%,transparent)] px-4 py-3.5"
+        >
+          <p className="text-[13px] font-medium text-fg">저장소에 글을 쓸 수 없습니다</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-fg-body">{storage.message}</p>
+          <a
+            href="https://github.com/settings/tokens?type=beta"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-block text-[13px] text-accent hover:underline"
+          >
+            토큰 설정 열기 →
+          </a>
+        </div>
+      )}
 
       {findings.length > 0 ? (
         <section className="mt-8">
