@@ -34,6 +34,13 @@ function parseOperation(v: unknown): Operation | null {
     if (typeof o.pinned !== 'boolean') return null
     return { kind: 'post.setPinned', slugs, pinned: o.pinned }
   }
+  if (o.kind === 'series.removePosts') {
+    return { kind: 'series.removePosts', slugs }
+  }
+  if (o.kind === 'series.setOrder' || o.kind === 'series.addPosts') {
+    if (typeof o.id !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(o.id)) return null
+    return { kind: o.kind, id: o.id, slugs }
+  }
   return null
 }
 

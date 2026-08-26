@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { editField, yamlList, yamlScalar, type FieldName } from './frontmatter-edit'
+import { editField, yamlList, yamlScalar, type AnyField, type FieldName } from './frontmatter-edit'
 import { REPO_ROOT, type PostMeta } from './scan'
 import { loadPosts } from './posts'
 import { writeFiles, usesGitHub } from '@/lib/storage'
@@ -11,7 +11,8 @@ export type Change = {
   path: string
   slug: string
   title: string
-  field: FieldName
+  /** 바뀐 필드. 여러 개면 ' · ' 로 잇는다. */
+  field: string
   before: string
   after: string
   /** 실제로 쓸 파일 전체 내용. 클라이언트로 보내지 않는다. */
@@ -38,6 +39,9 @@ export type Operation =
   | { kind: 'post.removeTag'; slugs: string[]; tag: string }
   | { kind: 'post.setCategory'; slugs: string[]; category: string }
   | { kind: 'post.setPinned'; slugs: string[]; pinned: boolean }
+  | { kind: 'series.setOrder'; id: string; slugs: string[] }
+  | { kind: 'series.addPosts'; id: string; slugs: string[] }
+  | { kind: 'series.removePosts'; slugs: string[] }
 
 /** 대상 파일들 중 워킹트리가 더러운 것. git이 undo인 도구에서 가장 중요한 경고다. */
 async function dirtyFiles(paths: string[]): Promise<string[]> {
@@ -116,11 +120,21 @@ function planTagDelete(posts: PostMeta[], tag: string) {
 
 type BulkResult = { changes: Change[]; skipped: Skipped[] }
 
-/** 선택한 글들에 같은 변경을 적용한다. 이미 그 상태인 글은 이유와 함께 건너뛴다. */
+/** null 이면 그 필드를 삭제한다. after 는 새로 넣을 때 어느 필드 뒤에 둘지. */
+type FieldEdit = { field: FieldName; line: string | null; after?: AnyField[] }
+type BulkStep = { edits: FieldEdit[] } | { skip: string } | null
+
+/**
+ * 선택한 글들에 같은 변경을 적용한다.
+ *
+ * 한 글에 여러 필드를 바꿀 수 있어야 한다(시리즈에 넣으면 series 와
+ * seriesOrder 가 함께 바뀐다). 각 편집을 앞선 결과 위에 이어서 적용하지
+ * 않으면 마지막 것만 남는다.
+ */
 function planBulk(
   posts: PostMeta[],
   slugs: string[],
-  apply: (p: PostMeta) => { field: FieldName; line: string } | { skip: string } | null,
+  apply: (p: PostMeta) => BulkStep,
 ): BulkResult {
   const changes: Change[] = []
   const skipped: Skipped[] = []
@@ -128,26 +142,40 @@ function planBulk(
   for (const p of posts) {
     if (!slugs.includes(p.file.slug)) continue
 
-    const r = apply(p)
-    if (r === null) continue
-    if ('skip' in r) {
-      skipped.push({ slug: p.file.slug, title: p.title, reason: r.skip })
+    const step = apply(p)
+    if (step === null) continue
+    if ('skip' in step) {
+      skipped.push({ slug: p.file.slug, title: p.title, reason: step.skip })
       continue
     }
 
-    const edit = editField(p.file.raw, r.field, { next: r.line })
-    if (!edit) {
+    let raw = p.file.raw
+    const fields: string[] = []
+    const before: string[] = []
+    const after: string[] = []
+
+    for (const e of step.edits) {
+      const edit = editField(raw, e.field, { next: e.line }, e.after)
+      if (!edit) continue
+      raw = edit.next
+      fields.push(e.field)
+      before.push(edit.beforeLine || `(${e.field} 없음)`)
+      after.push(edit.afterLine || `(${e.field} 삭제)`)
+    }
+
+    if (fields.length === 0) {
       skipped.push({ slug: p.file.slug, title: p.title, reason: '이미 같은 값' })
       continue
     }
+
     changes.push({
       path: p.file.path,
       slug: p.file.slug,
       title: p.title,
-      field: r.field,
-      before: edit.beforeLine,
-      after: edit.afterLine,
-      nextRaw: edit.next,
+      field: fields.join(' · '),
+      before: before.join('\n'),
+      after: after.join('\n'),
+      nextRaw: raw,
     })
   }
   return { changes, skipped }
@@ -186,7 +214,7 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
       const r = planBulk(posts, op.slugs, (p) =>
         p.tags.includes(op.tag)
           ? { skip: `이미 '${op.tag}' 보유` }
-          : { field: 'tags', line: `tags: ${yamlList([...p.tags, op.tag])}` },
+          : { edits: [{ field: 'tags', line: `tags: ${yamlList([...p.tags, op.tag])}` }] },
       )
       changes = r.changes
       skipped = r.skipped
@@ -196,7 +224,7 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
     case 'post.removeTag': {
       const r = planBulk(posts, op.slugs, (p) =>
         p.tags.includes(op.tag)
-          ? { field: 'tags', line: `tags: ${yamlList(p.tags.filter((t) => t !== op.tag))}` }
+          ? { edits: [{ field: 'tags', line: `tags: ${yamlList(p.tags.filter((t) => t !== op.tag))}` }] }
           : { skip: `'${op.tag}' 없음` },
       )
       changes = r.changes
@@ -208,18 +236,67 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
       const r = planBulk(posts, op.slugs, (p) =>
         p.category === op.category
           ? { skip: '이미 같은 카테고리' }
-          : { field: 'category', line: `category: ${yamlScalar(op.category)}` },
+          : { edits: [{ field: 'category', line: `category: ${yamlScalar(op.category)}` }] },
       )
       changes = r.changes
       skipped = r.skipped
       headline = `글 ${n}개를 '${op.category}' 카테고리로 옮깁니다`
       break
     }
+    case 'series.setOrder': {
+      // 넘어온 배열 순서대로 1부터 다시 매긴다. 번호 구멍(1,2,4)도 여기서 정리된다.
+      const r = planBulk(posts, op.slugs, (p) => {
+        const next = op.slugs.indexOf(p.file.slug) + 1
+        if (p.series !== op.id) return { skip: '이 시리즈 소속이 아님' }
+        if (p.seriesOrder === next) return { skip: `이미 ${next}번` }
+        return { edits: [{ field: 'seriesOrder', line: `seriesOrder: ${next}` }] }
+      })
+      changes = r.changes
+      skipped = r.skipped
+      headline = `'${op.id}' 시리즈 순서를 다시 매깁니다`
+      break
+    }
+    case 'series.addPosts': {
+      // 이미 들어있는 글의 최대 번호 뒤에 붙인다
+      let next =
+        posts.filter((p) => p.series === op.id).reduce((m, p) => Math.max(m, p.seriesOrder ?? 0), 0)
+      const r = planBulk(posts, op.slugs, (p) => {
+        if (p.series === op.id) return { skip: '이미 이 시리즈 소속' }
+        next += 1
+        return {
+          edits: [
+            { field: 'series', line: `series: ${yamlScalar(op.id)}` },
+            // series 바로 뒤에 둔다. 기본 앵커(category)를 쓰면 순서가 뒤집힌다.
+            { field: 'seriesOrder', line: `seriesOrder: ${next}`, after: ['series'] },
+          ],
+        }
+      })
+      changes = r.changes
+      skipped = r.skipped
+      headline = `글 ${op.slugs.length}개를 '${op.id}' 시리즈에 넣습니다`
+      break
+    }
+    case 'series.removePosts': {
+      const r = planBulk(posts, op.slugs, (p) =>
+        p.series
+          ? {
+              edits: [
+                { field: 'series', line: null },
+                { field: 'seriesOrder', line: null },
+              ],
+            }
+          : { skip: '시리즈 소속이 아님' },
+      )
+      changes = r.changes
+      skipped = r.skipped
+      headline = `글 ${op.slugs.length}개를 시리즈에서 뺍니다`
+      break
+    }
     case 'post.setPinned': {
       const r = planBulk(posts, op.slugs, (p) =>
         p.pinned === op.pinned
           ? { skip: op.pinned ? '이미 고정됨' : '이미 해제됨' }
-          : { field: 'pinned', line: `pinned: ${op.pinned}` },
+          : { edits: [{ field: 'pinned', line: `pinned: ${op.pinned}` }] },
       )
       changes = r.changes
       skipped = r.skipped
