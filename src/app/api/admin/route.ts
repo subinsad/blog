@@ -2,6 +2,7 @@ import { requireOwner, unauthorized } from '@/lib/auth/require'
 import { buildPlan, applyPlan, type Operation } from '@/lib/admin/plan'
 import { isCategory } from '@/lib/editor/frontmatter'
 import { CATEGORY_DEFS, MAX_CATEGORIES } from '@/config/categories'
+import { isSafeSlug } from '@/lib/slugify'
 
 /** 클라이언트가 보낸 계획은 절대 신뢰하지 않는다. 작업 지시만 받고 계획은 서버가 다시 만든다. */
 function parseOperation(v: unknown): Operation | null {
@@ -16,6 +17,10 @@ function parseOperation(v: unknown): Operation | null {
   if (o.kind === 'tag.delete') {
     if (typeof o.tag !== 'string' || !o.tag.trim()) return null
     return { kind: 'tag.delete', tag: o.tag.trim() }
+  }
+  if (o.kind === 'series.delete') {
+    if (typeof o.id !== 'string' || !isSafeSlug(o.id)) return null
+    return { kind: 'series.delete', id: o.id }
   }
 
   // 글 단위 벌크 작업. slugs 는 클라이언트가 보내지만, 실제로 어떤 파일을
@@ -43,6 +48,31 @@ function parseOperation(v: unknown): Operation | null {
     return { kind: o.kind, id: o.id, slugs }
   }
   return null
+}
+
+/**
+ * 시리즈 만들기·고치기. id 는 만들 때만 받고 이후에는 바꾸지 않는다 —
+ * 각 글의 frontmatter 와 /series/<id> 주소에 이미 박혀 있기 때문이다.
+ */
+function parseSeriesMeta(
+  o: Record<string, unknown>,
+  kind: 'series.add' | 'series.edit',
+): Operation | { error: string } {
+  const id = typeof o.id === 'string' ? o.id.trim().toLowerCase() : ''
+  const title = typeof o.title === 'string' ? o.title.trim() : ''
+  const description = typeof o.description === 'string' ? o.description.trim() : ''
+
+  if (!title) return { error: '제목을 입력하세요' }
+  // 한 줄 스칼라로 쓴다. 줄바꿈이 들어오면 yml 이 깨진다.
+  if (/[\r\n]/.test(title) || /[\r\n]/.test(description)) {
+    return { error: '제목과 설명에는 줄바꿈을 넣을 수 없습니다' }
+  }
+  if (title.length > 80) return { error: '제목은 80자까지입니다' }
+  if (description.length > 200) return { error: '설명은 200자까지입니다' }
+  if (!isSafeSlug(id)) {
+    return { error: 'id 는 영문 소문자·숫자·하이픈만 쓸 수 있습니다' }
+  }
+  return { kind, id, title, description }
 }
 
 const HEX = /^#[0-9a-f]{6}$/i
@@ -88,6 +118,10 @@ export async function POST(req: Request) {
 
   if (body?.kind === 'category.add') {
     const r = parseCategoryAdd(body)
+    if ('error' in r) return Response.json({ error: r.error }, { status: 400 })
+    op = r
+  } else if (body?.kind === 'series.add' || body?.kind === 'series.edit') {
+    const r = parseSeriesMeta(body, body.kind)
     if ('error' in r) return Response.json({ error: r.error }, { status: 400 })
     op = r
   } else {

@@ -5,16 +5,20 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { Plan, Operation } from '@/lib/admin/plan'
 import { formatDate } from '@/lib/format'
+import { slugify, isSafeSlug } from '@/lib/slugify'
 import { PlanPanel, ResultStrip } from './PlanPanel'
 
 export type SeriesItem = { id: string; title: string; description?: string }
 export type SeriesPost = { slug: string; title: string; date: string; order: number | null }
 export type FreePost = { slug: string; title: string; date: string }
 
+const field =
+  'h-[34px] w-full rounded-lg border border-border bg-bg px-2.5 text-[13px] text-fg-body outline-none hover:border-border-strong focus:border-accent'
+
 type Stage =
   | { at: 'idle' }
   | { at: 'plan'; op: Operation; plan: Plan }
-  | { at: 'done'; written: string[]; commit?: { sha: string; url: string } }
+  | { at: 'done'; plan: Plan; written: string[]; commit?: { sha: string; url: string } }
 
 export function SeriesClient({
   series,
@@ -35,6 +39,11 @@ export function SeriesClient({
   const [draft, setDraft] = useState<{ id: string; slugs: string[] } | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
   const [addingFor, setAddingFor] = useState<string | null>(null)
+  /** 시리즈 자체를 만들거나 고치는 폼. 글 목록과 동시에 열지 않는다. */
+  const [form, setForm] = useState<null | { mode: 'add' } | { mode: 'edit'; id: string }>(null)
+  const [meta, setMeta] = useState({ id: '', title: '', description: '' })
+  // id 를 한 번이라도 직접 건드리면 제목을 따라가지 않는다
+  const [idTouched, setIdTouched] = useState(false)
   const [stage, setStage] = useState<Stage>({ at: 'idle' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,6 +53,7 @@ export function SeriesClient({
   const view = order ?? current.map((p) => p.slug)
   const dirty = order !== null && order.join() !== current.map((p) => p.slug).join()
   const adding = addingFor === openId
+  const openMeta = series.find((s) => s.id === openId)
 
   // 저장하지 않은 순서를 들고 떠나려 하면 막는다
   useEffect(() => {
@@ -52,6 +62,22 @@ export function SeriesClient({
     window.addEventListener('beforeunload', onLeave)
     return () => window.removeEventListener('beforeunload', onLeave)
   }, [dirty])
+
+  const openAdd = () => {
+    setMeta({ id: '', title: '', description: '' })
+    setIdTouched(false)
+    setStage({ at: 'idle' })
+    setError(null)
+    setForm({ mode: 'add' })
+  }
+
+  const openEdit = (s: SeriesItem) => {
+    setMeta({ id: s.id, title: s.title, description: s.description ?? '' })
+    setIdTouched(true)
+    setStage({ at: 'idle' })
+    setError(null)
+    setForm({ mode: 'edit', id: s.id })
+  }
 
   const move = (slug: string, delta: number) => {
     const list = [...view]
@@ -83,8 +109,14 @@ export function SeriesClient({
       if (!res.ok) throw new Error(json.error ?? '작업 실패')
       if (mode === 'plan') setStage({ at: 'plan', op, plan: json.plan })
       else {
-        setStage({ at: 'done', written: json.written, commit: json.commit })
+        setStage({ at: 'done', plan: json.plan, written: json.written, commit: json.commit })
         setDraft(null)
+        setForm(null)
+        setAddingFor(null)
+        // 지운 시리즈를 계속 열어두면 빈 목록만 남는다
+        if (op.kind === 'series.delete') {
+          setOpenId(series.find((x) => x.id !== op.id)?.id ?? '')
+        }
         router.refresh()
       }
     } catch (e) {
@@ -113,16 +145,148 @@ export function SeriesClient({
             <span className="tabular-nums">{(postsBySeries[s.id] ?? []).length}</span>
           </button>
         ))}
+        <button
+          type="button"
+          onClick={openAdd}
+          className="h-[34px] rounded-lg border border-dashed border-border px-3 text-[13px] text-fg-muted transition-colors hover:border-border-strong hover:text-fg-body"
+        >
+          + 새 시리즈
+        </button>
       </div>
 
-      {series.length === 0 && (
+      {series.length === 0 && !form && (
         <p className="py-10 text-center text-[13px] text-fg-muted">
-          시리즈가 없습니다. <code className="font-mono">content/series/</code> 에 yml 파일을 만드세요.
+          아직 시리즈가 없습니다. 위의 <b className="font-medium text-fg-body">새 시리즈</b> 로 하나
+          만드세요.
         </p>
       )}
 
-      {openId && (
+      {form && (
+        <div className="max-w-[460px] rounded-xl border border-border p-4">
+          <p className="mb-3 text-[13px] font-medium text-fg">
+            {form.mode === 'add' ? '새 시리즈' : '시리즈 정보'}
+          </p>
+
+          <label className="mb-3 block">
+            <span className="mb-1 block text-xs text-fg-muted">제목</span>
+            <input
+              autoFocus
+              value={meta.title}
+              onChange={(e) => {
+                const title = e.target.value
+                setMeta((m) => ({
+                  ...m,
+                  title,
+                  id: form.mode === 'add' && !idTouched ? slugify(title) : m.id,
+                }))
+              }}
+              placeholder="예: React 훅 파헤치기"
+              className={field}
+            />
+          </label>
+
+          <label className="mb-3 block">
+            <span className="mb-1 block text-xs text-fg-muted">
+              설명 <span className="text-fg-subtle">— 비워도 됩니다</span>
+            </span>
+            <input
+              value={meta.description}
+              onChange={(e) => setMeta((m) => ({ ...m, description: e.target.value }))}
+              placeholder="이 연재가 무엇을 다루는지 한 줄로"
+              className={field}
+            />
+          </label>
+
+          <label className="mb-4 block">
+            <span className="mb-1 block text-xs text-fg-muted">
+              id <span className="text-fg-subtle">— 주소에 쓰입니다</span>
+            </span>
+            <input
+              value={meta.id}
+              disabled={form.mode === 'edit'}
+              onChange={(e) => {
+                setIdTouched(true)
+                setMeta((m) => ({ ...m, id: e.target.value.toLowerCase() }))
+              }}
+              placeholder="react-hukeul-pahechigi"
+              className={`${field} font-mono disabled:cursor-not-allowed disabled:text-fg-subtle`}
+            />
+            <span className="mt-1.5 block text-[11px] leading-relaxed text-fg-subtle">
+              {form.mode === 'add'
+                ? '제목에서 자동으로 만들어집니다. 만든 뒤에는 바꿀 수 없습니다.'
+                : 'id 는 각 글의 frontmatter 와 주소에 이미 박혀 있어 바꿀 수 없습니다.'}
+            </span>
+          </label>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setForm(null)}
+              className="h-[34px] rounded-lg px-3.5 text-[13px] text-fg-muted hover:bg-bg-hover"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={busy || !meta.title.trim() || !isSafeSlug(meta.id)}
+              onClick={() =>
+                void run(
+                  {
+                    kind: form.mode === 'add' ? 'series.add' : 'series.edit',
+                    id: meta.id,
+                    title: meta.title.trim(),
+                    description: meta.description.trim(),
+                  },
+                  'plan',
+                )
+              }
+              className="h-[34px] rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+            >
+              계속
+            </button>
+          </div>
+        </div>
+      )}
+
+      {openId && !form && (
         <>
+          <div className="mb-4 flex items-start gap-3">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-semibold text-fg">
+                {openMeta?.title ?? openId}
+              </span>
+              <span className="mt-0.5 block truncate text-[13px] text-fg-muted">
+                {openMeta?.description || '설명 없음'}
+              </span>
+            </span>
+            <Link
+              href={`/series/${openId}`}
+              className="shrink-0 pt-1 font-mono text-[12px] text-fg-subtle hover:text-accent max-[768px]:hidden"
+            >
+              /series/{openId}
+            </Link>
+            <button
+              type="button"
+              onClick={() => openMeta && openEdit(openMeta)}
+              className="h-[30px] shrink-0 rounded-lg border border-border px-2.5 text-[13px] text-fg-body hover:bg-bg-hover"
+            >
+              수정
+            </button>
+            <button
+              type="button"
+              disabled={busy || current.length > 0}
+              title={
+                current.length > 0
+                  ? `글 ${current.length}개가 아직 이 시리즈에 있습니다. 먼저 빼주세요.`
+                  : undefined
+              }
+              onClick={() => void run({ kind: 'series.delete', id: openId }, 'plan')}
+              className="h-[30px] shrink-0 rounded-lg px-2.5 text-[13px] text-fg-muted hover:bg-bg-elevated hover:text-[var(--m-red)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted"
+            >
+              삭제
+            </button>
+          </div>
+
           <div className="border-t border-border">
             {view.length === 0 && (
               <p className="py-10 text-center text-[13px] text-fg-muted">
@@ -253,7 +417,13 @@ export function SeriesClient({
 
       {stage.at === 'done' && (
         <div className="mt-4">
-          <ResultStrip written={stage.written} commit={stage.commit} />
+          <ResultStrip plan={stage.plan} written={stage.written} commit={stage.commit} />
+          {/* 시리즈 목록은 빌드 산출물에서 읽는다. 파일만 써서는 화면이 안 바뀐다. */}
+          {stage.plan.changes.some((c) => c.op === 'create') && (
+            <p className="mt-2 text-[11px] text-fg-subtle">
+              새 시리즈는 사이트가 다시 빌드된 뒤 이 목록과 글쓰기 화면의 시리즈 선택에 나타납니다.
+            </p>
+          )}
         </div>
       )}
 

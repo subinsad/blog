@@ -18,7 +18,7 @@ export type CategoryRow = {
 type Stage =
   | { at: 'idle' }
   | { at: 'plan'; op: Operation; plan: Plan }
-  | { at: 'done'; written: string[]; commit?: { sha: string; url: string } }
+  | { at: 'done'; plan: Plan; written: string[]; commit?: { sha: string; url: string } }
 
 /** 액센트(인디고)와 겹치지 않고 라이트/다크 대비가 확보된 쌍만 둔다. */
 const PALETTE = [
@@ -62,7 +62,7 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
       if (!res.ok) throw new Error(json.error ?? '작업 실패')
       if (mode === 'plan') setStage({ at: 'plan', op, plan: json.plan })
       else {
-        setStage({ at: 'done', written: json.written, commit: json.commit })
+        setStage({ at: 'done', plan: json.plan, written: json.written, commit: json.commit })
         setAdding(false)
         setName('')
         setSlug('')
@@ -124,7 +124,7 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
 
       {stage.at === 'done' && (
         <div className="mt-4">
-          <ResultStrip written={stage.written} commit={stage.commit} />
+          <ResultStrip plan={stage.plan} written={stage.written} commit={stage.commit} />
         </div>
       )}
 

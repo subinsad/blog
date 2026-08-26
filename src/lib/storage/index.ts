@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { authConfig } from '@/lib/auth/config'
 import { listTree, readBlob, commitFiles, checkRepoAccess } from './github'
@@ -15,7 +15,8 @@ export const usesGitHub = process.env.NODE_ENV === 'production'
 
 const POSTS_PREFIX = 'content/posts/'
 
-export type StoredFile = { path: string; content: string }
+/** content 가 null 이면 그 파일을 지운다. */
+export type StoredFile = { path: string; content: string | null }
 
 export async function listPosts(): Promise<PostFile[]> {
   if (!usesGitHub) return scanPostFiles()
@@ -60,7 +61,7 @@ export type WriteResult = {
 }
 
 /**
- * 여러 파일을 한 번에 쓴다.
+ * 여러 파일을 한 번에 쓴다. content 가 null 인 항목은 삭제된다.
  * 로컬에서는 전부 쓰고 실패 시 원본으로 되돌린다.
  * 프로덕션에서는 커밋 하나로 묶여 원자성이 보장된다.
  */
@@ -85,13 +86,19 @@ export async function writeFiles(
   try {
     for (const f of files) {
       const abs = resolve(REPO_ROOT, f.path)
-      await mkdir(dirname(abs), { recursive: true })
-      await writeFile(abs, f.content, 'utf8')
+      if (f.content === null) {
+        await unlink(abs).catch(() => {})
+      } else {
+        await mkdir(dirname(abs), { recursive: true })
+        await writeFile(abs, f.content, 'utf8')
+      }
       written.push(f.path)
     }
   } catch (e) {
+    // 되돌리기: 원래 있던 파일은 내용을 복구하고, 새로 만든 파일은 지운다.
     for (const [abs, raw] of originals) {
       if (raw !== null) await writeFile(abs, raw, 'utf8').catch(() => {})
+      else await unlink(abs).catch(() => {})
     }
     throw e
   }

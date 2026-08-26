@@ -111,7 +111,7 @@ export async function readBlob(sha: string): Promise<string> {
  * Git Data API로 트리를 통째로 만들면 원자성이 구조적으로 보장된다.
  */
 export async function commitFiles(
-  files: { path: string; content: string }[],
+  files: { path: string; content: string | null }[],
   message: string,
 ): Promise<{ sha: string; url: string }> {
   if (files.length === 0) throw new Error('커밋할 파일이 없습니다')
@@ -122,15 +122,18 @@ export async function commitFiles(
   const parent = ref.object.sha
   const base = await gh<{ tree: { sha: string } }>(`/git/commits/${parent}`)
 
+  // sha 가 null 인 항목은 base_tree 에서 그 경로를 지운다는 뜻이다.
   const blobs = await Promise.all(
     files.map((f) =>
-      gh<{ sha: string }>('/git/blobs', {
-        method: 'POST',
-        body: JSON.stringify({
-          content: Buffer.from(f.content, 'utf8').toString('base64'),
-          encoding: 'base64',
-        }),
-      }).then((b) => ({ path: f.path, sha: b.sha })),
+      f.content === null
+        ? Promise.resolve({ path: f.path, sha: null })
+        : gh<{ sha: string }>('/git/blobs', {
+            method: 'POST',
+            body: JSON.stringify({
+              content: Buffer.from(f.content, 'utf8').toString('base64'),
+              encoding: 'base64',
+            }),
+          }).then((b) => ({ path: f.path, sha: b.sha as string | null })),
     ),
   )
 
