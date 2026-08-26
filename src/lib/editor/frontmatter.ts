@@ -1,4 +1,5 @@
 import { CATEGORIES, type Category } from '@/lib/site'
+export { slugify } from '@/lib/slugify'
 
 export type Draft = {
   title: string
@@ -46,21 +47,6 @@ export function splitMdx(raw: string): { frontmatter: string; body: string } {
 
 export const isCategory = (v: unknown): v is Category =>
   typeof v === 'string' && (CATEGORIES as string[]).includes(v)
-
-/**
- * 제목 → slug. 한글은 URL에서 지저분해지므로 라틴 문자만 남기고,
- * 남는 게 없으면 한글을 그대로 쓴다(적어도 사람이 읽을 수 있다).
- */
-export function slugify(title: string): string {
-  const base = title
-    .toLowerCase()
-    .replace(/[^a-z0-9가-힣\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-  const ascii = base.replace(/[가-힣]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '')
-  return ascii.length >= 3 ? ascii : base
-}
 
 /**
  * 새 글의 초기값. 'use client' 모듈에 두면 서버 컴포넌트에서 호출할 수 없다
