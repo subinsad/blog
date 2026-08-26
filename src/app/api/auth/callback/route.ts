@@ -1,7 +1,13 @@
 import { cookies } from 'next/headers'
 import { exchangeCode, fetchUser } from '@/lib/auth/github'
 import { authConfig } from '@/lib/auth/config'
-import { makeSession, signSession, sessionCookie, hintCookie } from '@/lib/auth/session'
+import {
+  makeSession,
+  signSession,
+  sessionCookie,
+  hintCookie,
+  returnCookie,
+} from '@/lib/auth/session'
 
 const fail = (req: Request, reason: string) =>
   Response.redirect(new URL(`/login?error=${reason}`, req.url), 302)
@@ -30,6 +36,7 @@ export async function GET(req: Request) {
 
   jar.set(sessionCookie(await signSession(makeSession(user))))
   jar.set(hintCookie(true))
+  jar.set(returnCookie())
 
   return Response.redirect(new URL(next, req.url), 302)
 }

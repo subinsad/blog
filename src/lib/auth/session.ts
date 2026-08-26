@@ -1,4 +1,11 @@
-import { COOKIE_NAME, OWNER_HINT_COOKIE, SESSION_MAX_AGE, authConfig } from './config'
+import {
+  COOKIE_NAME,
+  OWNER_HINT_COOKIE,
+  OWNER_RETURN_COOKIE,
+  RETURN_MAX_AGE,
+  SESSION_MAX_AGE,
+  authConfig,
+} from './config'
 
 /**
  * 세션은 HMAC 서명된 쿠키 하나다. DB도 세션 저장소도 두지 않는다.
@@ -98,4 +105,18 @@ export const hintCookie = (on: boolean) => ({
   sameSite: 'lax' as const,
   path: '/',
   maxAge: on ? SESSION_MAX_AGE : 0,
+})
+
+/**
+ * 로그아웃해도 지우지 않는다. 자기 기기에서 다시 들어올 길은 남겨두는 게 맞고,
+ * 이 쿠키로는 아무것도 할 수 없다.
+ */
+export const returnCookie = () => ({
+  name: OWNER_RETURN_COOKIE,
+  value: '1',
+  httpOnly: false,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: RETURN_MAX_AGE,
 })

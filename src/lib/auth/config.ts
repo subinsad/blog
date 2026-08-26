@@ -20,6 +20,16 @@ export const authConfig = {
 export const COOKIE_NAME = 'subbi_session'
 /** 권한이 전혀 없는 UI 표시용 쿠키. 클라이언트가 읽을 수 있어야 하므로 httpOnly가 아니다. */
 export const OWNER_HINT_COOKIE = 'subbi_owner'
+
+/**
+ * "이 브라우저는 소유자 것" 이라는 표시. 세션보다 오래 남는다.
+ *
+ * 세션이 끊기면 소유자 메뉴가 통째로 사라져서 로그인으로 갈 길이 없어진다.
+ * 그렇다고 로그인 버튼을 모두에게 보이면 독자 화면이 시끄러워진다.
+ * 이 쿠키가 있는 브라우저에서만 로그인 버튼을 띄운다. 권한은 역시 없다.
+ */
+export const OWNER_RETURN_COOKIE = 'subbi_return'
+export const RETURN_MAX_AGE = 60 * 60 * 24 * 365
 /**
  * 세션 수명 30일.
  *
