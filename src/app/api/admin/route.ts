@@ -1,5 +1,6 @@
 import { requireOwner, unauthorized } from '@/lib/auth/require'
 import { buildPlan, applyPlan, type Operation } from '@/lib/admin/plan'
+import { isCategory } from '@/lib/editor/frontmatter'
 
 /** 클라이언트가 보낸 계획은 절대 신뢰하지 않는다. 작업 지시만 받고 계획은 서버가 다시 만든다. */
 function parseOperation(v: unknown): Operation | null {
@@ -14,6 +15,24 @@ function parseOperation(v: unknown): Operation | null {
   if (o.kind === 'tag.delete') {
     if (typeof o.tag !== 'string' || !o.tag.trim()) return null
     return { kind: 'tag.delete', tag: o.tag.trim() }
+  }
+
+  // 글 단위 벌크 작업. slugs 는 클라이언트가 보내지만, 실제로 어떤 파일을
+  // 건드릴지는 서버가 계획을 다시 만들면서 결정한다.
+  const slugs = Array.isArray(o.slugs) ? o.slugs.filter((x) => typeof x === 'string') : []
+  if (slugs.length === 0) return null
+
+  if (o.kind === 'post.addTag' || o.kind === 'post.removeTag') {
+    if (typeof o.tag !== 'string' || !o.tag.trim()) return null
+    return { kind: o.kind, slugs, tag: o.tag.trim() }
+  }
+  if (o.kind === 'post.setCategory') {
+    if (!isCategory(o.category)) return null
+    return { kind: 'post.setCategory', slugs, category: o.category }
+  }
+  if (o.kind === 'post.setPinned') {
+    if (typeof o.pinned !== 'boolean') return null
+    return { kind: 'post.setPinned', slugs, pinned: o.pinned }
   }
   return null
 }
