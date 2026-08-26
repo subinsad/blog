@@ -1,17 +1,10 @@
 import type { Metadata } from 'next'
-import localFont from 'next/font/local'
 import { JetBrains_Mono } from 'next/font/google'
 import { ThemeProvider } from 'next-themes'
 import { site } from '@/lib/site'
 import { categoryCss } from '@/config/categories'
+import './fonts.css'
 import './globals.css'
-
-const pretendard = localFont({
-  src: '../../public/fonts/PretendardVariable.woff2',
-  variable: '--font-pretendard',
-  display: 'swap',
-  weight: '45 920',
-})
 
 const jetbrains = JetBrains_Mono({
   subsets: ['latin'],
@@ -37,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="ko"
       suppressHydrationWarning
-      className={`${pretendard.variable} ${jetbrains.variable}`}
+      className={jetbrains.variable}
     >
       <head>
         {/*
