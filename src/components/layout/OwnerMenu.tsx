@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { OWNER_HINT_COOKIE } from '@/lib/auth/config'
+import { OWNER_HINT_COOKIE, OWNER_RETURN_COOKIE } from '@/lib/auth/config'
 
 /**
  * 소유자 전용 컨트롤. 독자에게는 렌더되지 않는다.
@@ -14,13 +15,19 @@ import { OWNER_HINT_COOKIE } from '@/lib/auth/config'
  * 배치: 글쓰기는 자주 쓰므로 버튼으로 한 번에 닿게 두고,
  * 가끔 쓰는 관리와 로그아웃은 메뉴로 접어 헤더를 조용하게 유지한다.
  */
-const readHint = () =>
-  document.cookie.split('; ').some((c) => c === `${OWNER_HINT_COOKIE}=1`)
+const has = (name: string) => document.cookie.split('; ').some((c) => c === `${name}=1`)
+
+/**
+ * 0 = 독자, 1 = 세션이 끊긴 소유자, 2 = 로그인된 소유자.
+ * 하나의 스냅샷으로 읽어야 useSyncExternalStore 가 매번 같은 값을 돌려준다.
+ */
+const readState = () => (has(OWNER_HINT_COOKIE) ? 2 : has(OWNER_RETURN_COOKIE) ? 1 : 0)
 
 const subscribe = () => () => {}
 
 export function OwnerMenu() {
-  const owner = useSyncExternalStore(subscribe, readHint, () => false)
+  const state = useSyncExternalStore(subscribe, readState, () => 0)
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -43,7 +50,23 @@ export function OwnerMenu() {
     }
   }, [open])
 
-  if (!owner) return null
+  if (state === 0) return null
+
+  // 세션만 끊긴 상태. 다시 들어올 길을 준다. 독자에게는 보이지 않는다.
+  if (state === 1) {
+    return (
+      <a
+        href={`/login?next=${encodeURIComponent(pathname)}`}
+        className="inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-border-strong px-3.5 text-[13px] font-medium text-fg-body transition-colors hover:bg-bg-hover"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+          <path d="m10 17 5-5-5-5M15 12H3" />
+        </svg>
+        로그인
+      </a>
+    )
+  }
 
   const item =
     'flex h-[34px] items-center gap-2.5 rounded-lg px-2.5 text-[13px] text-fg-body transition-colors hover:bg-bg-hover'
