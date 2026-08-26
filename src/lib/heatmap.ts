@@ -4,8 +4,8 @@ export type HeatDay = {
   count: number
   /** 0 = 없음, 1~3 = 농도. GitHub 처럼 다섯 단계까지 갈 만큼 글이 많지 않다. */
   level: 0 | 1 | 2 | 3
-  /** 범위 밖(오늘 이후)이라 칸을 비워둬야 하는 날 */
-  blank?: boolean
+  /** 오늘 이후. 칸은 그리되 툴팁을 달지 않는다. */
+  future?: boolean
 }
 
 export type HeatWeek = HeatDay[]
@@ -30,8 +30,9 @@ const levelOf = (n: number): HeatDay['level'] =>
 /**
  * 최근 1년치 격자.
  *
- * 열이 주, 행이 요일이다. 마지막 주가 오늘에서 끊기므로 그 뒤는 빈 칸으로
- * 남긴다. 채워버리면 아직 오지 않은 날에 "글 없음"이 표시된다.
+ * 열이 주, 행이 요일이다. 마지막 주의 오늘 이후 날도 칸은 그린다.
+ * 빼버리면 마지막 열만 짧아져 격자가 찌그러져 보인다. 대신 툴팁은 달지
+ * 않는다 — 아직 오지 않은 날에 "글 없음"이라고 말할 이유가 없다.
  */
 export function buildHeatmap(dates: string[], today = new Date()): Heatmap {
   const counts = new Map<string, number>()
@@ -58,7 +59,7 @@ export function buildHeatmap(dates: string[], today = new Date()): Heatmap {
     for (let d = 0; d < 7; d++) {
       const cur = new Date(start.getTime() + (w * 7 + d) * DAY)
       if (cur > end) {
-        week.push({ date: iso(cur), count: 0, level: 0, blank: true })
+        week.push({ date: iso(cur), count: 0, level: 0, future: true })
         continue
       }
       const key = iso(cur)
