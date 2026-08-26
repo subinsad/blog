@@ -1,4 +1,5 @@
 import { Header } from '@/components/layout/Header'
+import { CommandPalette } from '@/components/search/CommandPalette'
 
 /**
  * 공개 블로그 화면만 이 레이아웃을 쓴다.
@@ -10,6 +11,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
     <>
       <Header />
       {children}
+      <CommandPalette />
     </>
   )
 }
