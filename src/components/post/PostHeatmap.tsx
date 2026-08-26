@@ -1,8 +1,8 @@
-import { buildHeatmap } from '@/lib/heatmap'
+import { buildHeatmap, postYears } from '@/lib/heatmap'
 
-const WEEKDAY = ['', '월', '', '수', '', '금', '']
-const CELL = 11
 const GAP = 3
+/** 이 아래로는 칸이 너무 작아져 가로 스크롤로 넘긴다. */
+const MIN_WIDTH = 680
 
 /** 액센트 한 색의 농도만 쓴다. 새 색을 들이면 홈 상단이 시끄러워진다. */
 const FILL = [
@@ -18,77 +18,78 @@ const label = (date: string, count: number) => {
 }
 
 /**
- * 최근 1년 글쓰기 히트맵. 서버에서 그대로 그리고 툴팁은 네이티브 title 이라
- * 클라이언트 JS 가 0이다. 홈 맨 위에 있으니 무게를 더하면 안 된다.
+ * 달력 한 해(1월~12월)의 글쓰기 히트맵.
+ *
+ * 서버에서 그대로 그리고 툴팁은 네이티브 title 이라 클라이언트 JS 가 0이다.
+ * 홈 맨 위에 있으니 무게를 더하면 안 된다.
  */
 export function PostHeatmap({ dates }: { dates: string[] }) {
-  const h = buildHeatmap(dates)
-  const width = h.weeks.length * (CELL + GAP)
+  // 올해에 글이 없으면 가장 최근 글이 있는 해를 보여준다. 빈 격자를 띄울 이유가 없다.
+  const years = postYears(dates)
+  const now = new Date().getUTCFullYear()
+  const year = years.includes(now) ? now : (years[0] ?? now)
+
+  const h = buildHeatmap(dates, year)
+  const cols = h.weeks.length
 
   return (
     <section className="mb-8 border-b border-border pb-7">
       <p className="mb-3 text-[13px] text-fg-body">
-        지난 1년 동안 <span className="font-semibold text-fg tabular-nums">{h.total}편</span>
+        <span className="tabular-nums">{h.year}</span>년에{' '}
+        <span className="font-semibold text-fg tabular-nums">{h.total}편</span>
         <span className="text-fg-muted"> · {h.activeDays}일에 씀</span>
         {h.maxStreak > 1 && <span className="text-fg-muted"> · 최장 {h.maxStreak}일 연속</span>}
       </p>
 
-      <div className="flex gap-1.5">
-        {/* 요일 라벨은 스크롤 밖에 둔다. 안에 두면 최근 주로 스크롤됐을 때 밀려 사라진다. */}
-        <div
-          className="flex shrink-0 flex-col text-[9px] text-fg-subtle"
-          style={{ gap: GAP, paddingTop: 14 }}
-          aria-hidden="true"
-        >
-          {WEEKDAY.map((d, i) => (
-            <span key={i} style={{ height: CELL, lineHeight: `${CELL}px` }}>
-              {d}
-            </span>
-          ))}
-        </div>
+      {/*
+        칸 크기를 고정하지 않고 컨테이너를 채운다. 고정하면 오른쪽에 여백이 남는다.
+        좁은 화면에서는 칸이 너무 작아지므로 최소 폭부터 가로 스크롤로 넘긴다.
+        rtl 로 두면 스크롤이 연말 쪽에서 시작한다.
+      */}
+      <div
+        dir="rtl"
+        className="overflow-x-auto pb-1 [scrollbar-width:thin]"
+        role="img"
+        aria-label={`${h.year}년 글쓰기 히트맵. 총 ${h.total}편을 ${h.activeDays}일에 걸쳐 썼습니다.`}
+      >
+        <div dir="ltr" style={{ minWidth: MIN_WIDTH }}>
+          {/* 월 라벨도 같은 열 격자에 얹어야 칸 폭이 변해도 어긋나지 않는다 */}
+          <div
+            className="mb-1 grid text-[10px] text-fg-subtle"
+            style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, columnGap: GAP }}
+            aria-hidden="true"
+          >
+            {h.monthLabels.map((m) => (
+              <span
+                key={`${m.week}-${m.label}`}
+                style={{ gridColumnStart: m.week + 1, gridRow: 1 }}
+                className="whitespace-nowrap"
+              >
+                {m.label}
+              </span>
+            ))}
+          </div>
 
-        {/*
-          좁은 화면에서 가로로 넘칠 때 최근 주가 먼저 보여야 한다.
-          컨테이너를 rtl 로 두면 스크롤이 오른쪽 끝에서 시작한다.
-        */}
-        <div
-          dir="rtl"
-          className="min-w-0 overflow-x-auto pb-1 [scrollbar-width:thin]"
-          role="img"
-          aria-label={`최근 1년 글쓰기 히트맵. 총 ${h.total}편을 ${h.activeDays}일에 걸쳐 썼습니다.`}
-        >
-          <div dir="ltr" style={{ width }}>
-            <div className="relative mb-1 h-[10px]" aria-hidden="true">
-              {h.monthLabels.map((m) => (
-                <span
-                  key={`${m.week}-${m.label}`}
-                  className="absolute top-0 text-[10px] whitespace-nowrap text-fg-subtle"
-                  style={{ left: m.week * (CELL + GAP) }}
-                >
-                  {m.label}
-                </span>
-              ))}
-            </div>
-
-            <div className="flex" style={{ gap: GAP }}>
-              {h.weeks.map((week, wi) => (
-                <div key={wi} className="flex flex-col" style={{ gap: GAP }}>
-                  {week.map((day) => (
-                    <span
-                      key={day.date}
-                      // 오늘 이후에는 툴팁을 달지 않는다
-                      title={day.future ? undefined : label(day.date, day.count)}
-                      style={{ width: CELL, height: CELL, background: FILL[day.level] }}
-                      className="rounded-[2px]"
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: GAP }}
+          >
+            {h.weeks.map((week, wi) => (
+              <div key={wi} className="grid" style={{ rowGap: GAP }}>
+                {week.map((day) => (
+                  <span
+                    key={day.date}
+                    // 그 해가 아니거나 아직 오지 않은 날에는 툴팁을 달지 않는다
+                    title={day.muted ? undefined : label(day.date, day.count)}
+                    style={{ background: FILL[day.level] }}
+                    className="aspect-square rounded-[2px]"
+                  />
+                ))}
+              </div>
+            ))}
           </div>
         </div>
       </div>
-
     </section>
   )
 }
