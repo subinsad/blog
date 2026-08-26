@@ -64,7 +64,7 @@ export function editField(
   raw: string,
   field: FieldName,
   edit: FieldEdit,
-  insertAfter: AnyField[] = ['category', 'date', 'title'],
+  insertAfter: AnyField[] | undefined = undefined,
 ): { next: string; beforeLine: string; afterLine: string } | null {
   const fm = splitFrontmatter(raw)
   if (!fm) return null
@@ -79,7 +79,7 @@ export function editField(
   } else {
     if (edit.next === null) return null
     let at = lines.length
-    for (const anchor of insertAfter) {
+    for (const anchor of insertAfter ?? ['category', 'date', 'title']) {
       const r = findField(lines, anchor)
       if (r) {
         at = r.end + 1
