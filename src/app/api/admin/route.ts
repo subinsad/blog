@@ -1,6 +1,7 @@
 import { requireOwner, unauthorized } from '@/lib/auth/require'
 import { buildPlan, applyPlan, type Operation } from '@/lib/admin/plan'
 import { isCategory } from '@/lib/editor/frontmatter'
+import { CATEGORY_DEFS, MAX_CATEGORIES } from '@/config/categories'
 
 /** 클라이언트가 보낸 계획은 절대 신뢰하지 않는다. 작업 지시만 받고 계획은 서버가 다시 만든다. */
 function parseOperation(v: unknown): Operation | null {
@@ -44,6 +45,34 @@ function parseOperation(v: unknown): Operation | null {
   return null
 }
 
+const HEX = /^#[0-9a-f]{6}$/i
+const RESERVED = ['posts', 'tags', 'series', 'write', 'admin', 'about', 'categories', 'login', 'api']
+
+/** 카테고리 추가는 검증 항목이 많아 따로 뺀다. 폼에서도 같은 규칙을 먼저 걸러준다. */
+function parseCategoryAdd(o: Record<string, unknown>): Operation | { error: string } {
+  const name = typeof o.name === 'string' ? o.name.trim() : ''
+  const slug = typeof o.slug === 'string' ? o.slug.trim().toLowerCase() : ''
+  const light = typeof o.light === 'string' ? o.light.trim() : ''
+  const dark = typeof o.dark === 'string' ? o.dark.trim() : ''
+
+  if (!name) return { error: '이름을 입력하세요' }
+  // YAML frontmatter 에 인용 없이 들어가는 값이라 특수문자를 막는다
+  if (/[:#"'\[\]{}|>&*!%@`]|^\s|\s$/.test(name)) {
+    return { error: '이름에 쓸 수 없는 문자가 있습니다 (: # 따옴표 등)' }
+  }
+  if (CATEGORY_DEFS.some((c) => c.name === name)) return { error: '이미 있는 이름입니다' }
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
+    return { error: 'slug 은 영문 소문자·숫자·하이픈만 쓸 수 있습니다' }
+  }
+  if (RESERVED.includes(slug)) return { error: `'${slug}' 는 예약된 주소입니다` }
+  if (CATEGORY_DEFS.some((c) => c.slug === slug)) return { error: '이미 있는 slug 입니다' }
+  if (!HEX.test(light) || !HEX.test(dark)) return { error: '색은 #rrggbb 형식이어야 합니다' }
+  if (CATEGORY_DEFS.length >= MAX_CATEGORIES) {
+    return { error: `카테고리는 ${MAX_CATEGORIES}개까지입니다` }
+  }
+  return { kind: 'category.add', name, slug, light, dark }
+}
+
 export async function POST(req: Request) {
   if (!(await requireOwner())) return unauthorized()
 
@@ -54,7 +83,16 @@ export async function POST(req: Request) {
     return Response.json({ error: 'JSON 파싱 실패' }, { status: 400 })
   }
 
-  const op = parseOperation(payload.operation)
+  const body = payload.operation as Record<string, unknown> | undefined
+  let op: Operation | null = null
+
+  if (body?.kind === 'category.add') {
+    const r = parseCategoryAdd(body)
+    if ('error' in r) return Response.json({ error: r.error }, { status: 400 })
+    op = r
+  } else {
+    op = parseOperation(payload.operation)
+  }
   if (!op) return Response.json({ error: '알 수 없는 작업입니다' }, { status: 400 })
 
   try {

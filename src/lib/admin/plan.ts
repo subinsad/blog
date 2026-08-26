@@ -3,7 +3,7 @@ import { promisify } from 'node:util'
 import { editField, yamlList, yamlScalar, type AnyField, type FieldName } from './frontmatter-edit'
 import { REPO_ROOT, type PostMeta } from './scan'
 import { loadPosts } from './posts'
-import { writeFiles, usesGitHub } from '@/lib/storage'
+import { writeFiles, usesGitHub, readRepoFile } from '@/lib/storage'
 
 const exec = promisify(execFile)
 
@@ -24,6 +24,8 @@ export type Skipped = { slug: string; title: string; reason: string }
 export type Plan = {
   headline: string
   detail: string
+  /** 글이 아니라 설정 파일이 바뀌는 경우 */
+  config?: { path: string; before: string; after: string }
   changes: Omit<Change, 'nextRaw'>[]
   skipped: Skipped[]
   /** 수정 대상 중 커밋되지 않은 변경이 있는 파일 */
@@ -42,6 +44,7 @@ export type Operation =
   | { kind: 'series.setOrder'; id: string; slugs: string[] }
   | { kind: 'series.addPosts'; id: string; slugs: string[] }
   | { kind: 'series.removePosts'; slugs: string[] }
+  | { kind: 'category.add'; name: string; slug: string; light: string; dark: string }
 
 /** 대상 파일들 중 워킹트리가 더러운 것. git이 undo인 도구에서 가장 중요한 경고다. */
 async function dirtyFiles(paths: string[]): Promise<string[]> {
@@ -181,6 +184,53 @@ function planBulk(
   return { changes, skipped }
 }
 
+/**
+ * 카테고리 추가는 글이 아니라 설정 파일 하나를 고친다.
+ * 배열 리터럴 마지막 항목 뒤에 한 줄을 끼워 넣는다.
+ */
+async function planCategoryAdd(op: {
+  name: string
+  slug: string
+  light: string
+  dark: string
+}): Promise<{ changes: Change[]; headline: string }> {
+  const path = 'src/config/categories.ts'
+  const raw = await readRepoFile(path)
+  if (raw === null) throw new Error(`${path} 를 읽지 못했습니다`)
+
+  const anchor = '] as const satisfies'
+  const at = raw.indexOf(anchor)
+  if (at === -1) throw new Error(`${path} 형태가 예상과 다릅니다`)
+
+  const line = `  { name: ${JSON.stringify(op.name)}, slug: '${op.slug}', light: '${op.light}', dark: '${op.dark}' },`
+  const next = raw.slice(0, at) + line + '\n' + raw.slice(at)
+
+  return {
+    changes: [
+      {
+        path,
+        slug: op.slug,
+        title: op.name,
+        field: 'CATEGORY_DEFS',
+        before: '(없음)',
+        after: line.trim(),
+        nextRaw: next,
+      },
+    ],
+    headline: `'${op.name}' 카테고리를 추가합니다`,
+  }
+}
+
+/** 무엇이 바뀌는지 한 줄로. 글 프론트매터와 설정 파일은 성격이 다르다. */
+function describe(changes: Change[]): string {
+  if (changes.length === 0) return '변경할 내용이 없습니다'
+  const fields = [...new Set(changes.map((c) => c.field))].join(' · ')
+  const isConfig = changes.every((c) => c.path.startsWith('src/'))
+  return isConfig
+    ? `설정 파일 ${changes.length}개 · ${fields}`
+    : `프론트매터 ${fields} 필드만 변경 · 파일 ${changes.length}개`
+}
+
 /** 계획을 만든다. 파일은 건드리지 않는다. */
 export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: Change[] }> {
   const posts = await loadPosts()
@@ -292,6 +342,12 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
       headline = `글 ${op.slugs.length}개를 시리즈에서 뺍니다`
       break
     }
+    case 'category.add': {
+      const { changes: c, headline: h } = await planCategoryAdd(op)
+      changes = c
+      headline = h
+      break
+    }
     case 'post.setPinned': {
       const r = planBulk(posts, op.slugs, (p) =>
         p.pinned === op.pinned
@@ -310,10 +366,7 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
 
   const plan: Plan = {
     headline,
-    detail:
-      changes.length === 0
-        ? '변경할 내용이 없습니다'
-        : `프론트매터 ${[...new Set(changes.map((c) => c.field))].join(' · ')} 필드만 변경 · 파일 ${changes.length}개`,
+    detail: describe(changes),
     // nextRaw(파일 전체 내용)는 클라이언트로 보내지 않는다
     changes: changes.map((c) => ({
       path: c.path,

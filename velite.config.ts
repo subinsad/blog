@@ -4,7 +4,16 @@ import rehypeAutolinkHeadings from 'rehype-autolink-headings'
 import rehypePrettyCode from 'rehype-pretty-code'
 import remarkGfm from 'remark-gfm'
 
-export const CATEGORIES = ['Frontend', 'Backend', 'DevOps', 'CS · 기초', '회고 · 생각'] as const
+import { CATEGORY_DEFS, MAX_CATEGORIES } from './src/config/categories'
+
+// 스키마가 단일 소스를 그대로 쓴다. 카테고리를 추가해도 여기는 안 고친다.
+export const CATEGORIES = CATEGORY_DEFS.map((c) => c.name) as unknown as readonly [string, ...string[]]
+
+if (CATEGORY_DEFS.length > MAX_CATEGORIES) {
+  throw new Error(
+    `카테고리는 ${MAX_CATEGORIES}개까지입니다. 지금 ${CATEGORY_DEFS.length}개 — 늘어나면 사이드바 탐색이 무너집니다.`,
+  )
+}
 
 const posts = defineCollection({
   name: 'Post',

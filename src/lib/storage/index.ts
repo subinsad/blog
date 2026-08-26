@@ -35,6 +35,11 @@ export async function listPosts(): Promise<PostFile[]> {
   return files.sort((a, b) => a.path.localeCompare(b.path))
 }
 
+/** 저장소 안의 임의 파일을 읽는다. 로컬은 디스크, 프로덕션은 GitHub. */
+export async function readRepoFile(repoPath: string): Promise<string | null> {
+  return readPost(repoPath)
+}
+
 export async function readPost(repoPath: string): Promise<string | null> {
   if (!usesGitHub) {
     try {
