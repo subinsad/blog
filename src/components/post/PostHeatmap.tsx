@@ -27,22 +27,11 @@ export function PostHeatmap({ dates }: { dates: string[] }) {
 
   return (
     <section className="mb-8 border-b border-border pb-7">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="text-[13px] text-fg-body">
-          지난 1년 동안 <span className="font-semibold text-fg tabular-nums">{h.total}편</span>
-          <span className="text-fg-muted"> · {h.activeDays}일에 씀</span>
-          {h.maxStreak > 1 && (
-            <span className="text-fg-muted"> · 최장 {h.maxStreak}일 연속</span>
-          )}
-        </p>
-        <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
-          적음
-          {FILL.map((bg, i) => (
-            <span key={i} style={{ background: bg }} className="size-[10px] rounded-[2px]" />
-          ))}
-          많음
-        </div>
-      </div>
+      <p className="mb-3 text-[13px] text-fg-body">
+        지난 1년 동안 <span className="font-semibold text-fg tabular-nums">{h.total}편</span>
+        <span className="text-fg-muted"> · {h.activeDays}일에 씀</span>
+        {h.maxStreak > 1 && <span className="text-fg-muted"> · 최장 {h.maxStreak}일 연속</span>}
+      </p>
 
       <div className="flex gap-1.5">
         {/* 요일 라벨은 스크롤 밖에 둔다. 안에 두면 최근 주로 스크롤됐을 때 밀려 사라진다. */}
@@ -84,18 +73,15 @@ export function PostHeatmap({ dates }: { dates: string[] }) {
             <div className="flex" style={{ gap: GAP }}>
               {h.weeks.map((week, wi) => (
                 <div key={wi} className="flex flex-col" style={{ gap: GAP }}>
-                  {week.map((day) =>
-                    day.blank ? (
-                      <span key={day.date} style={{ width: CELL, height: CELL }} />
-                    ) : (
-                      <span
-                        key={day.date}
-                        title={label(day.date, day.count)}
-                        style={{ width: CELL, height: CELL, background: FILL[day.level] }}
-                        className="rounded-[2px]"
-                      />
-                    ),
-                  )}
+                  {week.map((day) => (
+                    <span
+                      key={day.date}
+                      // 오늘 이후에는 툴팁을 달지 않는다
+                      title={day.future ? undefined : label(day.date, day.count)}
+                      style={{ width: CELL, height: CELL, background: FILL[day.level] }}
+                      className="rounded-[2px]"
+                    />
+                  ))}
                 </div>
               ))}
             </div>
