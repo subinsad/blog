@@ -13,8 +13,8 @@
   --bg-hover: #f1f3f5;
   --fg: #212529;
   --fg-body: #495057;
-  --fg-muted: #868e96;
-  --fg-subtle: #adb5bd;
+  --fg-muted: #5f666d;
+  --fg-subtle: #6b7378;
   --border: #e9ecef;
   --border-strong: #dee2e6;
   --accent: #4263eb;
@@ -47,7 +47,7 @@
   --fg: #e9ecef;
   --fg-body: #c1c2c5;
   --fg-muted: #909296;
-  --fg-subtle: #5c5f66;
+  --fg-subtle: #82868e;
   --border: #2c2e33;
   --border-strong: #373a40;
   --accent: #748ffc;
@@ -87,7 +87,7 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-subtle: var(--accent-subtle);
-  --font-sans: var(--font-pretendard), -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+  --font-sans: 'Pretendard Variable', -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
 }
 

@@ -11,7 +11,8 @@
     "content": "velite",
     "review": "codex review --uncommitted",
     "review:branch": "codex review --base main",
-    "new:post": "tsx scripts/new-post.ts"
+    "new:post": "tsx scripts/new-post.ts",
+    "fonts:sync": "tsx scripts/sync-fonts.ts"
   },
   "dependencies": {
     "@tiptap/core": "^3.30.3",
