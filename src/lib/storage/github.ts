@@ -15,10 +15,70 @@ async function gh<T>(path: string, init?: RequestInit): Promise<T> {
     cache: 'no-store',
   })
   if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`GitHub API ${res.status} ${path} — ${body.slice(0, 200)}`)
+    throw new Error(await explain(res, path))
   }
   return (await res.json()) as T
+}
+
+/**
+ * GitHub 응답을 고칠 수 있는 문장으로 바꾼다.
+ * 원문 그대로 보여주면 "Resource not accessible by personal access token" 만
+ * 남아서, 무엇을 어디서 고쳐야 하는지 알 수 없다.
+ */
+async function explain(res: Response, path: string): Promise<string> {
+  const raw = await res.text().catch(() => '')
+  const detail = raw.slice(0, 200)
+  const where = path ? ` (${path})` : ''
+
+  switch (res.status) {
+    case 401:
+      return `GitHub 토큰이 유효하지 않습니다. GITHUB_REPO_TOKEN 이 만료됐거나 값이 잘못되었습니다.${where}`
+    case 403:
+      return [
+        '토큰에 저장소 쓰기 권한이 없습니다.',
+        'Fine-grained PAT 이라면 세 가지를 확인하세요.',
+        `1) Repository access 에 ${authConfig.repo} 가 포함돼 있는지`,
+        '2) Permissions → Contents 가 "Read and write" 인지 (Read-only 면 실패합니다)',
+        '3) Classic 토큰이라면 repo 스코프가 켜져 있는지',
+      ].join(' ')
+    case 404:
+      return `저장소 ${authConfig.repo} 를 찾을 수 없습니다. 이름이 틀렸거나, 토큰에 이 저장소 접근 권한이 없습니다.`
+    case 409:
+      return '그 사이 다른 커밋이 올라왔습니다. 화면을 새로고침한 뒤 다시 시도하세요.'
+    case 422:
+      return `GitHub 이 요청을 거부했습니다. ${detail}`
+    default:
+      return `GitHub API ${res.status}${where} — ${detail}`
+  }
+}
+
+export type RepoAccess =
+  | { ok: true; canWrite: true }
+  | { ok: false; canWrite: boolean; message: string }
+
+/**
+ * 글을 저장하기 전에 토큰이 실제로 쓸 수 있는지 미리 본다.
+ * 저장 버튼을 눌러봐야 알 수 있으면, 글을 다 쓴 뒤에야 막힌다.
+ */
+export async function checkRepoAccess(): Promise<RepoAccess> {
+  if (!authConfig.repoToken) {
+    return { ok: false, canWrite: false, message: 'GITHUB_REPO_TOKEN 이 설정되지 않았습니다.' }
+  }
+  try {
+    const repo = await gh<{ permissions?: { push?: boolean } }>('')
+    if (repo.permissions?.push) return { ok: true, canWrite: true }
+    return {
+      ok: false,
+      canWrite: false,
+      message: `토큰이 ${authConfig.repo} 를 읽을 수는 있지만 쓸 수 없습니다. Contents 권한을 "Read and write" 로 바꾸세요.`,
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      canWrite: false,
+      message: e instanceof Error ? e.message : '저장소 접근을 확인하지 못했습니다.',
+    }
+  }
 }
 
 export type TreeEntry = { path: string; type: string; sha: string }
