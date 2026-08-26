@@ -20,7 +20,15 @@ export const authConfig = {
 export const COOKIE_NAME = 'subbi_session'
 /** 권한이 전혀 없는 UI 표시용 쿠키. 클라이언트가 읽을 수 있어야 하므로 httpOnly가 아니다. */
 export const OWNER_HINT_COOKIE = 'subbi_owner'
-export const SESSION_MAX_AGE = 60 * 60 * 12 // 12시간
+/**
+ * 세션 수명 30일.
+ *
+ * 12시간으로 뒀더니 하루만 지나도 헤더의 소유자 메뉴가 사라져서, 사라진
+ * 걸 버그로 오해하게 된다. 혼자 자기 기기에서 쓰는 블로그이고 이 세션이
+ * 주는 권한은 글 쓰기뿐이다(저장소 쓰기 토큰은 서버에만 있다).
+ * 소유자 ID 를 바꾸면 기존 세션은 즉시 무효가 된다.
+ */
+export const SESSION_MAX_AGE = 60 * 60 * 24 * 30
 
 /** 어떤 설정이 비었는지 알려준다. 로그인 화면에서 그대로 보여주기 위한 것. */
 export function missingAuthConfig(): string[] {
