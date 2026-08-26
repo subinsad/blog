@@ -17,6 +17,8 @@ function resolveSiteUrl(): string {
   return 'http://localhost:3000'
 }
 
+import { CATEGORY_DEFS, CSS_VAR } from '@/config/categories'
+
 export const site = {
   name: 'subbi.log',
   title: 'subbi.log',
@@ -26,16 +28,12 @@ export const site = {
   github: 'https://github.com/subinsad',
 } as const
 
-export const CATEGORY_META = {
-  Frontend: { slug: 'frontend', color: 'var(--c-frontend)' },
-  Backend: { slug: 'backend', color: 'var(--c-backend)' },
-  DevOps: { slug: 'devops', color: 'var(--c-devops)' },
-  'CS · 기초': { slug: 'cs', color: 'var(--c-cs)' },
-  '회고 · 생각': { slug: 'retro', color: 'var(--c-retro)' },
-} as const
+export const CATEGORY_META = Object.fromEntries(
+  CATEGORY_DEFS.map((c) => [c.name, { slug: c.slug, color: `var(${CSS_VAR(c.slug)})` }]),
+) as Record<string, { slug: string; color: string }>
 
-export type Category = keyof typeof CATEGORY_META
-export const CATEGORIES = Object.keys(CATEGORY_META) as Category[]
+export type Category = (typeof CATEGORY_DEFS)[number]['name']
+export const CATEGORIES = CATEGORY_DEFS.map((c) => c.name) as Category[]
 
 export const categoryBySlug = (slug: string): Category | undefined =>
   CATEGORIES.find((c) => CATEGORY_META[c].slug === slug)

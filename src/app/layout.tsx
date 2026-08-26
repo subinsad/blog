@@ -3,6 +3,7 @@ import localFont from 'next/font/local'
 import { JetBrains_Mono } from 'next/font/google'
 import { ThemeProvider } from 'next-themes'
 import { site } from '@/lib/site'
+import { categoryCss } from '@/config/categories'
 import './globals.css'
 
 const pretendard = localFont({
@@ -38,6 +39,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
       className={`${pretendard.variable} ${jetbrains.variable}`}
     >
+      <head>
+        {/*
+          카테고리 색은 설정 파일에서 만들어 심는다. globals.css 에 하드코딩하면
+          카테고리를 추가할 때마다 두 곳(라이트/다크)을 더 고쳐야 하고, 하나만
+          빠뜨려도 조용히 어긋난다. 값은 6자리 hex 만 통과시킨다.
+        */}
+        <style dangerouslySetInnerHTML={{ __html: categoryCss() }} />
+      </head>
       <body>
         <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem>
           <a
