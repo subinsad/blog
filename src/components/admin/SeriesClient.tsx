@@ -54,6 +54,7 @@ export function SeriesClient({
   const dirty = order !== null && order.join() !== current.map((p) => p.slug).join()
   const adding = addingFor === openId
   const openMeta = series.find((s) => s.id === openId)
+  const renaming = form?.mode === 'edit' && form.id !== meta.id
 
   // 저장하지 않은 순서를 들고 떠나려 하면 막는다
   useEffect(() => {
@@ -117,6 +118,7 @@ export function SeriesClient({
         if (op.kind === 'series.delete') {
           setOpenId(series.find((x) => x.id !== op.id)?.id ?? '')
         }
+        if (op.kind === 'series.rename') setOpenId(op.to)
         router.refresh()
       }
     } catch (e) {
@@ -203,18 +205,19 @@ export function SeriesClient({
             </span>
             <input
               value={meta.id}
-              disabled={form.mode === 'edit'}
               onChange={(e) => {
                 setIdTouched(true)
                 setMeta((m) => ({ ...m, id: e.target.value.toLowerCase() }))
               }}
               placeholder="react-hukeul-pahechigi"
-              className={`${field} font-mono disabled:cursor-not-allowed disabled:text-fg-subtle`}
+              className={`${field} font-mono`}
             />
             <span className="mt-1.5 block text-[11px] leading-relaxed text-fg-subtle">
               {form.mode === 'add'
-                ? '제목에서 자동으로 만들어집니다. 만든 뒤에는 바꿀 수 없습니다.'
-                : 'id 는 각 글의 frontmatter 와 주소에 이미 박혀 있어 바꿀 수 없습니다.'}
+                ? '제목에서 자동으로 만들어집니다.'
+                : renaming
+                  ? `주소가 /series/${meta.id} 로 바뀝니다. 소속 글과 옛 주소도 같이 옮겨집니다.`
+                  : '바꾸면 주소가 함께 바뀝니다. 옛 주소는 새 주소로 넘어갑니다.'}
             </span>
           </label>
 
@@ -231,12 +234,22 @@ export function SeriesClient({
               disabled={busy || !meta.title.trim() || !isSafeSlug(meta.id)}
               onClick={() =>
                 void run(
-                  {
-                    kind: form.mode === 'add' ? 'series.add' : 'series.edit',
-                    id: meta.id,
-                    title: meta.title.trim(),
-                    description: meta.description.trim(),
-                  },
+                  renaming
+                    ? {
+                        // id 가 바뀌면 파일·소속 글·주소가 함께 움직인다.
+                        // 제목·설명도 같이 실어 한 커밋으로 끝낸다.
+                        kind: 'series.rename',
+                        from: form.mode === 'edit' ? form.id : '',
+                        to: meta.id,
+                        title: meta.title.trim(),
+                        description: meta.description.trim(),
+                      }
+                    : {
+                        kind: form.mode === 'add' ? 'series.add' : 'series.edit',
+                        id: meta.id,
+                        title: meta.title.trim(),
+                        description: meta.description.trim(),
+                      },
                   'plan',
                 )
               }

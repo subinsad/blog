@@ -37,7 +37,7 @@ const field =
 
 export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
   const router = useRouter()
-  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState<null | { mode: 'add' } | { mode: 'edit'; from: string }>(null)
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [color, setColor] = useState(0)
@@ -48,6 +48,23 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
   const used = new Set(rows.map((r) => r.light))
   const palette = PALETTE.filter((p) => !used.has(p.light))
   const full = rows.length >= MAX_CATEGORIES
+  const adding = form?.mode === 'add'
+
+  const openAdd = () => {
+    setName('')
+    setSlug('')
+    setError(null)
+    setStage({ at: 'idle' })
+    setForm({ mode: 'add' })
+  }
+
+  const openEdit = (r: CategoryRow) => {
+    setName(r.name)
+    setSlug(r.slug)
+    setError(null)
+    setStage({ at: 'idle' })
+    setForm({ mode: 'edit', from: r.name })
+  }
 
   const run = async (op: Operation, mode: 'plan' | 'apply') => {
     setBusy(true)
@@ -63,7 +80,7 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
       if (mode === 'plan') setStage({ at: 'plan', op, plan: json.plan })
       else {
         setStage({ at: 'done', plan: json.plan, written: json.written, commit: json.commit })
-        setAdding(false)
+        setForm(null)
         setName('')
         setSlug('')
         router.refresh()
@@ -83,7 +100,7 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
         {rows.map((r) => (
           <div
             key={r.slug}
-            className="flex h-[52px] items-center gap-3 border-b border-border px-1"
+            className="group flex h-[52px] items-center gap-3 border-b border-border px-1"
           >
             <span
               className="size-2 shrink-0 rounded-full"
@@ -94,13 +111,35 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
             </span>
             <Link
               href={`/categories/${r.slug}`}
-              className="shrink-0 font-mono text-[12px] text-fg-subtle hover:text-accent"
+              className="shrink-0 font-mono text-[12px] text-fg-subtle hover:text-accent max-[768px]:hidden"
             >
               /{r.slug}
             </Link>
-            <span className="w-14 shrink-0 text-right text-[13px] text-fg-muted tabular-nums">
+            <span className="w-12 shrink-0 text-right text-[13px] text-fg-muted tabular-nums">
               {r.count}개
             </span>
+            <button
+              type="button"
+              onClick={() => openEdit(r)}
+              className="h-[30px] shrink-0 rounded-lg px-2.5 text-[13px] text-fg-muted opacity-0 transition-opacity hover:bg-bg-elevated hover:text-fg-body group-hover:opacity-100 focus-visible:opacity-100"
+            >
+              수정
+            </button>
+            <button
+              type="button"
+              disabled={busy || r.count > 0 || rows.length <= 1}
+              title={
+                r.count > 0
+                  ? `글 ${r.count}개가 아직 이 카테고리에 있습니다. 먼저 옮겨주세요.`
+                  : rows.length <= 1
+                    ? '마지막 카테고리는 지울 수 없습니다'
+                    : undefined
+              }
+              onClick={() => void run({ kind: 'category.delete', name: r.name }, 'plan')}
+              className="h-[30px] shrink-0 rounded-lg px-2.5 text-[13px] text-fg-muted opacity-0 transition-opacity hover:bg-bg-elevated hover:text-[var(--m-red)] group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:group-hover:opacity-30 disabled:hover:bg-transparent disabled:hover:text-fg-muted"
+            >
+              삭제
+            </button>
           </div>
         ))}
       </div>
@@ -129,9 +168,11 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
       )}
 
       <div className="mt-5">
-        {adding ? (
+        {form ? (
           <div className="max-w-[420px] rounded-xl border border-border p-4">
-            <p className="mb-3 text-[13px] font-medium text-fg">새 카테고리</p>
+            <p className="mb-3 text-[13px] font-medium text-fg">
+              {adding ? '새 카테고리' : `'${form.mode === 'edit' ? form.from : ''}' 수정`}
+            </p>
 
             <label className="mb-3 block">
               <span className="mb-1 block text-xs text-fg-muted">이름</span>
@@ -157,9 +198,15 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
                 placeholder="infra"
                 className={`${field} font-mono`}
               />
+              {!adding && (
+                <span className="mt-1.5 block text-[11px] leading-relaxed text-fg-subtle">
+                  이름을 바꾸면 이 카테고리 글의 frontmatter 가 전부 함께 바뀝니다. slug 를 바꾸면
+                  옛 주소는 새 주소로 넘어갑니다.
+                </span>
+              )}
             </label>
 
-            <div className="mb-4">
+            <div className={adding ? 'mb-4' : 'hidden'}>
               <span className="mb-1.5 block text-xs text-fg-muted">색</span>
               <div className="flex flex-wrap gap-1.5">
                 {palette.map((p, i) => (
@@ -186,7 +233,7 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setAdding(false)}
+                onClick={() => setForm(null)}
                 className="h-[34px] rounded-lg px-3.5 text-[13px] text-fg-muted hover:bg-bg-hover"
               >
                 취소
@@ -196,13 +243,21 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
                 disabled={busy || !name.trim() || !slug.trim()}
                 onClick={() =>
                   void run(
-                    {
-                      kind: 'category.add',
-                      name: name.trim(),
-                      slug: slug.trim(),
-                      light: chosen.light,
-                      dark: chosen.dark,
-                    },
+                    adding
+                      ? {
+                          kind: 'category.add',
+                          name: name.trim(),
+                          slug: slug.trim(),
+                          light: chosen.light,
+                          dark: chosen.dark,
+                        }
+                      : {
+                          // 색은 그대로 둔다. 계획 단계가 파일에서 읽어 옮긴다.
+                          kind: 'category.rename',
+                          from: form.mode === 'edit' ? form.from : '',
+                          name: name.trim(),
+                          slug: slug.trim(),
+                        },
                     'plan',
                   )
                 }
@@ -217,7 +272,7 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
             type="button"
             disabled={full}
             title={full ? `카테고리는 ${MAX_CATEGORIES}개까지입니다` : undefined}
-            onClick={() => setAdding(true)}
+            onClick={openAdd}
             className="h-[34px] rounded-lg border border-border px-3.5 text-[13px] text-fg-body hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             {full ? `카테고리 ${MAX_CATEGORIES}개를 다 썼습니다` : '새 카테고리'}

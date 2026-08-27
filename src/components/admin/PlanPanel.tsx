@@ -13,6 +13,15 @@ import type { Plan } from '@/lib/admin/plan'
  */
 type Changes = Plan['changes']
 
+/** 주소는 퍼센트 인코딩된 채로 저장된다. 화면에는 읽을 수 있게 되돌린다. */
+function readable(url: string): string {
+  try {
+    return decodeURIComponent(url)
+  } catch {
+    return url
+  }
+}
+
 /** 확인 버튼과 결과 줄에 쓰는 목적어. 무엇을 누르는지 알아야 누를 수 있다. */
 function subject(changes: Changes): string {
   return changes.every((c) => c.path.startsWith('content/posts/')) ? '글' : '파일'
@@ -113,11 +122,24 @@ export function PlanPanel({
         </div>
       )}
 
+      {plan.moved.length > 0 && (
+        <div className="border-b border-border px-4 py-2.5 text-[13px] text-fg-muted">
+          옮겨지는 URL — 옛 주소는 새 주소로 넘어갑니다
+          <span className="mt-1 block font-mono text-[11px] text-fg-subtle">
+            {plan.moved.map((m) => (
+              <span key={m.from} className="block truncate">
+                {readable(m.from)} → {readable(m.to)}
+              </span>
+            ))}
+          </span>
+        </div>
+      )}
+
       {plan.deadUrls.length > 0 && (
         <div className="border-b border-border px-4 py-2.5 text-[13px] text-fg-muted">
           사라지는 URL{' '}
           <span className="font-mono text-[11px] text-fg-subtle">
-            {plan.deadUrls.join('  ')}
+            {plan.deadUrls.map(readable).join('  ')}
           </span>
         </div>
       )}
