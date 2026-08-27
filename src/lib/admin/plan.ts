@@ -1,9 +1,12 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { editField, yamlList, yamlScalar, type AnyField, type FieldName } from './frontmatter-edit'
+import { categoryLine, parseCategories, spliceCategory } from './category-file'
+import { applyMoves, type Move } from './redirects-edit'
 import { buildSeriesYml, editSeriesYml, seriesPath, seriesUrl } from './series-file'
 import { REPO_ROOT, type PostMeta } from './scan'
 import { loadPosts } from './posts'
+import { ro } from '@/lib/format'
 import { writeFiles, usesGitHub, readRepoFile } from '@/lib/storage'
 
 const exec = promisify(execFile)
@@ -35,6 +38,8 @@ export type Plan = {
   dirty: string[]
   /** 이 작업으로 죽는 공개 URL */
   deadUrls: string[]
+  /** 옛 주소 → 새 주소. 리다이렉트가 깔리므로 죽지 않는다. */
+  moved: Move[]
 }
 
 export type Operation =
@@ -51,6 +56,9 @@ export type Operation =
   | { kind: 'series.edit'; id: string; title: string; description: string }
   | { kind: 'series.delete'; id: string }
   | { kind: 'category.add'; name: string; slug: string; light: string; dark: string }
+  | { kind: 'category.rename'; from: string; name: string; slug: string }
+  | { kind: 'category.delete'; name: string }
+  | { kind: 'series.rename'; from: string; to: string; title: string; description: string }
 
 /** 대상 파일들 중 워킹트리가 더러운 것. git이 undo인 도구에서 가장 중요한 경고다. */
 async function dirtyFiles(paths: string[]): Promise<string[]> {
@@ -93,6 +101,7 @@ function planTagMerge(posts: PostMeta[], from: string[], to: string) {
       field: 'tags',
       before: edit.beforeLine,
       after: edit.afterLine,
+      op: 'update',
       nextRaw: edit.next,
     })
   }
@@ -121,6 +130,7 @@ function planTagDelete(posts: PostMeta[], tag: string) {
       field: 'tags',
       before: edit.beforeLine,
       after: edit.afterLine,
+      op: 'update',
       nextRaw: edit.next,
     })
   }
@@ -184,6 +194,7 @@ function planBulk(
       field: fields.join(' · '),
       before: before.join('\n'),
       after: after.join('\n'),
+      op: 'update',
       nextRaw: raw,
     })
   }
@@ -208,7 +219,7 @@ async function planCategoryAdd(op: {
   const at = raw.indexOf(anchor)
   if (at === -1) throw new Error(`${path} 형태가 예상과 다릅니다`)
 
-  const line = `  { name: ${JSON.stringify(op.name)}, slug: '${op.slug}', light: '${op.light}', dark: '${op.dark}' },`
+  const line = categoryLine(op)
   const next = raw.slice(0, at) + line + '\n' + raw.slice(at)
 
   return {
@@ -224,6 +235,197 @@ async function planCategoryAdd(op: {
       },
     ],
     headline: `'${op.name}' 카테고리를 추가합니다`,
+  }
+}
+
+const CATEGORIES_PATH = 'src/config/categories.ts'
+const REDIRECTS_PATH = 'src/config/redirects.ts'
+
+const categoryUrl = (slug: string) => `/categories/${slug}`
+
+/** 옮겨진 주소를 리다이렉트 설정에 적는다. 적을 게 없으면 null. */
+async function planRedirects(moves: Move[]): Promise<Change | null> {
+  const real = moves.filter((m) => m.from !== m.to)
+  if (real.length === 0) return null
+
+  const raw = await readRepoFile(REDIRECTS_PATH)
+  if (raw === null) throw new Error(`${REDIRECTS_PATH} 를 읽지 못했습니다`)
+
+  const edit = applyMoves(raw, real)
+  if (!edit) return null
+
+  return {
+    path: REDIRECTS_PATH,
+    slug: 'redirects',
+    title: '리다이렉트',
+    field: 'REDIRECTS',
+    before: `(${real.length}개 추가 전)`,
+    after: real.map((m) => `${m.from} → ${m.to}`).join('\n'),
+    op: 'update',
+    nextRaw: edit.next,
+  }
+}
+
+/**
+ * 카테고리 이름·slug 바꾸기.
+ *
+ * 이름은 글 frontmatter 에, slug 는 주소에 들어간다. 설정 파일만 고치면
+ * 옛 이름을 쓰는 글이 스키마 검증에서 떨어져 빌드가 깨진다. 한 커밋에
+ * 전부 같이 바뀌어야 한다.
+ */
+async function planCategoryRename(
+  posts: PostMeta[],
+  op: { from: string; name: string; slug: string },
+): Promise<{ changes: Change[]; skipped: Skipped[]; headline: string; moved: Move[] }> {
+  const raw = await readRepoFile(CATEGORIES_PATH)
+  if (raw === null) throw new Error(`${CATEGORIES_PATH} 를 읽지 못했습니다`)
+
+  const defs = parseCategories(raw)
+  const target = defs.find((c) => c.name === op.from)
+  if (!target) throw new Error(`'${op.from}' 카테고리를 찾을 수 없습니다`)
+  if (op.name !== op.from && defs.some((c) => c.name === op.name)) {
+    throw new Error(`이미 '${op.name}' 카테고리가 있습니다`)
+  }
+  if (op.slug !== target.slug && defs.some((c) => c.slug === op.slug)) {
+    throw new Error(`이미 '${op.slug}' slug 를 쓰는 카테고리가 있습니다`)
+  }
+
+  const changes: Change[] = []
+  const nextLine = categoryLine({ ...target, name: op.name, slug: op.slug })
+  const oldLine = raw.split('\n')[target.at]
+
+  if (oldLine.trim() !== nextLine.trim()) {
+    changes.push({
+      path: CATEGORIES_PATH,
+      slug: op.slug,
+      title: op.name,
+      field: 'CATEGORY_DEFS',
+      before: oldLine.trim(),
+      after: nextLine.trim(),
+      op: 'update',
+      nextRaw: spliceCategory(raw, target.at, nextLine),
+    })
+  }
+
+  // 이름이 그대로면 글은 건드릴 게 없다
+  const slugs = op.name === op.from ? [] : posts.filter((p) => p.category === op.from).map((p) => p.file.slug)
+  const bulk = planBulk(posts, slugs, () => ({
+    edits: [{ field: 'category', line: `category: ${yamlScalar(op.name)}` }],
+  }))
+  changes.push(...bulk.changes)
+
+  const moved: Move[] =
+    op.slug === target.slug ? [] : [{ from: categoryUrl(target.slug), to: categoryUrl(op.slug) }]
+  const redirect = await planRedirects(moved)
+  if (redirect) changes.push(redirect)
+
+  return {
+    changes,
+    skipped: bulk.skipped,
+    headline:
+      op.name === op.from
+        ? `'${op.from}' 카테고리 주소를 '${op.slug}' 로 바꿉니다`
+        : `'${op.from}' 카테고리를 '${op.name}' ${ro(op.name)} 바꿉니다`,
+    moved,
+  }
+}
+
+/** 카테고리 지우기. 글이 남아 있으면 그 글들이 없는 카테고리를 가리키게 된다. */
+async function planCategoryDelete(
+  posts: PostMeta[],
+  name: string,
+): Promise<{ changes: Change[]; headline: string; deadUrls: string[] }> {
+  const raw = await readRepoFile(CATEGORIES_PATH)
+  if (raw === null) throw new Error(`${CATEGORIES_PATH} 를 읽지 못했습니다`)
+
+  const defs = parseCategories(raw)
+  const target = defs.find((c) => c.name === name)
+  if (!target) throw new Error(`'${name}' 카테고리를 찾을 수 없습니다`)
+
+  const held = posts.filter((p) => p.category === name)
+  if (held.length > 0) {
+    throw new Error(`글 ${held.length}개가 아직 이 카테고리에 있습니다. 먼저 옮겨주세요.`)
+  }
+  // 스키마가 최소 한 개를 요구한다. 0개가 되면 빌드가 깨진다.
+  if (defs.length <= 1) throw new Error('마지막 카테고리는 지울 수 없습니다')
+
+  return {
+    changes: [
+      {
+        path: CATEGORIES_PATH,
+        slug: target.slug,
+        title: name,
+        field: 'CATEGORY_DEFS',
+        before: raw.split('\n')[target.at].trim(),
+        after: '(삭제)',
+        op: 'update',
+        nextRaw: spliceCategory(raw, target.at, null),
+      },
+    ],
+    headline: `'${name}' 카테고리를 지웁니다`,
+    deadUrls: [categoryUrl(target.slug)],
+  }
+}
+
+/**
+ * 시리즈 id 바꾸기. id 는 파일 이름이자 주소이자 각 글의 series 값이다.
+ * 파일을 옮기고, 소속 글을 전부 고치고, 옛 주소를 리다이렉트한다.
+ */
+async function planSeriesRename(
+  posts: PostMeta[],
+  op: { from: string; to: string; title: string; description: string },
+): Promise<{ changes: Change[]; skipped: Skipped[]; headline: string; moved: Move[] }> {
+  const { from, to } = op
+  if (from === to) throw new Error('같은 id 입니다')
+  const raw = await readRepoFile(seriesPath(from))
+  if (raw === null) throw new Error(`'${from}' 시리즈를 찾을 수 없습니다`)
+  if ((await readRepoFile(seriesPath(to))) !== null) {
+    throw new Error(`이미 '${to}' 시리즈가 있습니다`)
+  }
+
+  // id 줄만 갈아끼운다. 주석이나 여분의 키는 그대로 옮겨간다.
+  // 제목·설명도 같이 바뀌었으면 한 커밋에서 함께 처리한다.
+  const renamed = raw.replace(/^id\s*:.*$/m, `id: ${to}`)
+  const edit = editSeriesYml(renamed, { title: op.title, description: op.description })
+  const moved = edit?.next ?? renamed
+
+  const changes: Change[] = [
+    {
+      path: seriesPath(to),
+      slug: to,
+      title: to,
+      field: '시리즈',
+      before: '(없음)',
+      after: moved.trimEnd(),
+      op: 'create',
+      nextRaw: moved,
+    },
+    {
+      path: seriesPath(from),
+      slug: from,
+      title: from,
+      field: '시리즈',
+      before: raw.trimEnd(),
+      after: '(삭제)',
+      op: 'delete',
+    },
+  ]
+
+  const slugs = posts.filter((p) => p.series === from).map((p) => p.file.slug)
+  const bulk = planBulk(posts, slugs, () => ({
+    edits: [{ field: 'series', line: `series: ${yamlScalar(to)}` }],
+  }))
+  changes.push(...bulk.changes)
+
+  const moves: Move[] = [{ from: seriesUrl(from), to: seriesUrl(to) }]
+  const redirect = await planRedirects(moves)
+  if (redirect) changes.push(redirect)
+
+  return {
+    changes,
+    skipped: bulk.skipped,
+    headline: `'${from}' 시리즈 주소를 '${to}' 로 바꿉니다`,
+    moved: moves,
   }
 }
 
@@ -325,18 +527,21 @@ async function planSeriesDelete(
 /** 무엇이 바뀌는지 한 줄로. 글 프론트매터와 설정 파일은 성격이 다르다. */
 function describe(changes: Change[]): string {
   if (changes.length === 0) return '변경할 내용이 없습니다'
-  const fields = [...new Set(changes.map((c) => c.field))].join(' · ')
-  const every = (op: Change['op']) => changes.every((c) => c.op === op)
+  const post = changes.filter((c) => c.path.startsWith('content/posts/'))
+  const other = changes.length - post.length
 
-  if (every('create')) return `파일 ${changes.length}개를 새로 만듭니다`
-  if (every('delete')) return `파일 ${changes.length}개를 지웁니다`
-  if (changes.every((c) => c.path.startsWith('src/'))) {
-    return `설정 파일 ${changes.length}개 · ${fields}`
+  // 이름 변경은 글과 설정 파일을 한꺼번에 건드린다. 필드 이름을 늘어놓는
+  // 것보다 어느 쪽이 몇 개인지가 먼저 눈에 들어와야 한다.
+  if (post.length > 0 && other > 0) return `글 ${post.length}개 · 설정 파일 ${other}개`
+
+  if (other === 0) {
+    const fields = [...new Set(post.map((c) => c.field))].join(' · ')
+    return `프론트매터 ${fields} 필드만 변경 · 파일 ${post.length}개`
   }
-  if (changes.every((c) => c.path.startsWith('content/posts/'))) {
-    return `프론트매터 ${fields} 필드만 변경 · 파일 ${changes.length}개`
-  }
-  return `${fields} 변경 · 파일 ${changes.length}개`
+  if (changes.every((c) => c.op === 'create')) return `파일 ${changes.length}개를 새로 만듭니다`
+  if (changes.every((c) => c.op === 'delete')) return `파일 ${changes.length}개를 지웁니다`
+  const fields = [...new Set(changes.map((c) => c.field))].join(' · ')
+  return `설정 파일 ${changes.length}개 · ${fields}`
 }
 
 /** 계획을 만든다. 파일은 건드리지 않는다. */
@@ -347,6 +552,7 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
   let skipped: Skipped[] = []
   let headline = ''
   let deadUrls: string[] = []
+  let moved: Move[] = []
 
   const n = (op as { slugs?: string[] }).slugs?.length ?? 0
 
@@ -355,11 +561,14 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
       const r = planTagMerge(posts, op.from, op.to)
       changes = r.changes
       skipped = r.skipped
-      deadUrls = r.sources.map(tagUrl)
+      // 옛 태그 주소는 죽지 않는다. 새 태그로 넘긴다.
+      moved = r.sources.map((t) => ({ from: tagUrl(t), to: tagUrl(op.to) }))
+      const redirect = changes.length > 0 ? await planRedirects(moved) : null
+      if (redirect) changes.push(redirect)
       headline =
         r.sources.length === 1
-          ? `'${r.sources[0]}' 태그를 '${op.to}' 로 바꿉니다`
-          : `태그 ${r.sources.length}개를 '${op.to}' 로 합칩니다`
+          ? `'${r.sources[0]}' 태그를 '${op.to}' ${ro(op.to)} 바꿉니다`
+          : `태그 ${r.sources.length}개를 '${op.to}' ${ro(op.to)} 합칩니다`
       break
     }
     case 'tag.delete': {
@@ -469,6 +678,29 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
       deadUrls = r.deadUrls
       break
     }
+    case 'category.rename': {
+      const r = await planCategoryRename(posts, op)
+      changes = r.changes
+      skipped = r.skipped
+      headline = r.headline
+      moved = r.moved
+      break
+    }
+    case 'category.delete': {
+      const r = await planCategoryDelete(posts, op.name)
+      changes = r.changes
+      headline = r.headline
+      deadUrls = r.deadUrls
+      break
+    }
+    case 'series.rename': {
+      const r = await planSeriesRename(posts, op)
+      changes = r.changes
+      skipped = r.skipped
+      headline = r.headline
+      moved = r.moved
+      break
+    }
     case 'category.add': {
       const { changes: c, headline: h } = await planCategoryAdd(op)
       changes = c
@@ -489,7 +721,10 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
   }
 
   const dirty = await dirtyFiles(changes.map((c) => c.path))
-  if (changes.length === 0) deadUrls = []
+  if (changes.length === 0) {
+    deadUrls = []
+    moved = []
+  }
 
   const plan: Plan = {
     headline,
@@ -507,6 +742,7 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
     skipped,
     dirty,
     deadUrls,
+    moved,
   }
 
   return { plan, changes }
