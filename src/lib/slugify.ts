@@ -42,3 +42,19 @@ export function slugify(title: string, fallbackDate?: string): string {
 
 /** 파일 경로가 되는 값이라 형태를 좁게 강제한다. */
 export const isSafeSlug = (s: string) => /^[a-z0-9][a-z0-9-]*$/.test(s) && s.length <= 80
+
+/**
+ * URL 한 조각을 인코딩한다. encodeURIComponent 로는 모자라다.
+ *
+ * 그 함수는 `! ' ( ) *` 를 남긴다. 태그처럼 자유롭게 적는 값이 주소가 될 때
+ * 두 군데서 터진다.
+ *   `'` — src/config/redirects.ts 의 문자열 리터럴을 깨서 빌드가 죽는다.
+ *   `( ) *` — Next 의 redirects source 는 path-to-regexp 패턴이라
+ *             괄호가 캡처 그룹이 되고 `*` 는 아예 컴파일 에러다.
+ * 남는 것까지 마저 퍼센트 인코딩해서, 주소가 될 값은 전부 여기를 지나게 한다.
+ */
+export const encodeSeg = (s: string) =>
+  encodeURIComponent(s).replace(
+    /[!'()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  )

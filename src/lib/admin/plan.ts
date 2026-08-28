@@ -1,12 +1,20 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { editField, yamlList, yamlScalar, type AnyField, type FieldName } from './frontmatter-edit'
+import {
+  editField,
+  splitFrontmatter,
+  yamlList,
+  yamlScalar,
+  type AnyField,
+  type FieldName,
+} from './frontmatter-edit'
 import { categoryLine, parseCategories, spliceCategory } from './category-file'
 import { applyMoves, type Move } from './redirects-edit'
 import { buildSeriesYml, editSeriesYml, seriesPath, seriesUrl } from './series-file'
 import { REPO_ROOT, type PostMeta } from './scan'
 import { loadPosts } from './posts'
 import { ro } from '@/lib/format'
+import { encodeSeg } from '@/lib/slugify'
 import { writeFiles, usesGitHub, readRepoFile } from '@/lib/storage'
 
 const exec = promisify(execFile)
@@ -77,7 +85,9 @@ async function dirtyFiles(paths: string[]): Promise<string[]> {
   }
 }
 
-const tagUrl = (t: string) => `/tags/${encodeURIComponent(t)}`
+// 태그는 사람이 자유롭게 적는 값이 그대로 주소가 되는 유일한 자리다.
+// encodeURIComponent 만으로는 모자란 이유는 encodeSeg 주석에 있다.
+const tagUrl = (t: string) => `/tags/${encodeSeg(t)}`
 
 function planTagMerge(posts: PostMeta[], from: string[], to: string) {
   const sources = from.filter((t) => t !== to)
@@ -183,7 +193,11 @@ function planBulk(
     }
 
     if (fields.length === 0) {
-      skipped.push({ slug: p.file.slug, title: p.title, reason: '이미 같은 값' })
+      // frontmatter 를 아예 못 읽은 것과 값이 이미 같은 것은 위험도가 다르다.
+      // 뭉뚱그리면 이름 변경이 멈춰야 할 자리에서 조용히 지나간다.
+      const reason =
+        splitFrontmatter(p.file.raw) === null ? 'frontmatter 를 읽지 못했습니다' : '이미 같은 값'
+      skipped.push({ slug: p.file.slug, title: p.title, reason })
       continue
     }
 
@@ -202,6 +216,59 @@ function planBulk(
 }
 
 /**
+ * 이름 변경은 all-or-nothing 이다.
+ *
+ * 설정 파일과 글 frontmatter 가 한 커밋에서 같이 움직여야 하는데, 한쪽만
+ * 가면 남은 글이 없는 이름을 가리킨다. 정상 상황에서는 여기 걸릴 일이 없다
+ * — 대상 글은 옛 이름을 가진 것만 골랐고 새 이름과 다르다는 게 보장된다.
+ * 그러니 skip 이 하나라도 나왔다면 프론트매터가 성치 않다는 뜻이고,
+ * 절반만 적용하느니 멈추고 사람에게 보여주는 게 맞다.
+ */
+const partialRename = (what: string, skipped: Skipped[]) =>
+  new Error(
+    `${what} 이름을 바꾸지 못했습니다. 글 ${skipped.length}개를 고칠 수 없어 아무것도 바꾸지 않았습니다: ` +
+      skipped.map((s) => `${s.slug}(${s.reason})`).join(', '),
+  )
+
+const CATEGORIES_PATH = 'src/config/categories.ts'
+const REDIRECTS_PATH = 'src/config/redirects.ts'
+
+// slug 는 isSafeSlug 를 통과한 [a-z0-9-] 뿐이라 encodeSeg 는 여기서 항등이다.
+// 그래도 통과시킨다 — 주소가 되는 값은 예외 없이 한 문을 지나야 한다.
+const categoryUrl = (slug: string) => `/categories/${encodeSeg(slug)}`
+
+/**
+ * 옮겨진 주소를 리다이렉트 설정에 적는다. 적을 게 없으면 null.
+ *
+ * claim 은 이번 작업으로 다시 살아나는 주소다. 그 주소를 가리고 있던 옛
+ * 항목을 회수한다. 이동 없이 claim 만 있는 호출(새로 만들기)도 있다.
+ */
+async function planRedirects(moves: Move[], claim: string[] = []): Promise<Change | null> {
+  const real = moves.filter((m) => m.from !== m.to)
+  if (real.length === 0 && claim.length === 0) return null
+
+  const raw = await readRepoFile(REDIRECTS_PATH)
+  if (raw === null) throw new Error(`${REDIRECTS_PATH} 를 읽지 못했습니다`)
+
+  const edit = applyMoves(raw, real, claim)
+  if (!edit) return null
+
+  const after = real.map((m) => `${m.from} → ${m.to}`)
+  if (edit.removed > 0) after.push(`(가리고 있던 옛 항목 ${edit.removed}개 회수)`)
+
+  return {
+    path: REDIRECTS_PATH,
+    slug: 'redirects',
+    title: '리다이렉트',
+    field: 'REDIRECTS',
+    before: '(변경 전)',
+    after: after.join('\n'),
+    op: 'update',
+    nextRaw: edit.next,
+  }
+}
+
+/**
  * 카테고리 추가는 글이 아니라 설정 파일 하나를 고친다.
  * 배열 리터럴 마지막 항목 뒤에 한 줄을 끼워 넣는다.
  */
@@ -211,59 +278,34 @@ async function planCategoryAdd(op: {
   light: string
   dark: string
 }): Promise<{ changes: Change[]; headline: string }> {
-  const path = 'src/config/categories.ts'
-  const raw = await readRepoFile(path)
-  if (raw === null) throw new Error(`${path} 를 읽지 못했습니다`)
+  const raw = await readRepoFile(CATEGORIES_PATH)
+  if (raw === null) throw new Error(`${CATEGORIES_PATH} 를 읽지 못했습니다`)
 
   const anchor = '] as const satisfies'
   const at = raw.indexOf(anchor)
-  if (at === -1) throw new Error(`${path} 형태가 예상과 다릅니다`)
+  if (at === -1) throw new Error(`${CATEGORIES_PATH} 형태가 예상과 다릅니다`)
 
   const line = categoryLine(op)
   const next = raw.slice(0, at) + line + '\n' + raw.slice(at)
 
-  return {
-    changes: [
-      {
-        path,
-        slug: op.slug,
-        title: op.name,
-        field: 'CATEGORY_DEFS',
-        before: '(없음)',
-        after: line.trim(),
-        nextRaw: next,
-      },
-    ],
-    headline: `'${op.name}' 카테고리를 추가합니다`,
-  }
-}
+  const changes: Change[] = [
+    {
+      path: CATEGORIES_PATH,
+      slug: op.slug,
+      title: op.name,
+      field: 'CATEGORY_DEFS',
+      before: '(없음)',
+      after: line.trim(),
+      op: 'update',
+      nextRaw: next,
+    },
+  ]
 
-const CATEGORIES_PATH = 'src/config/categories.ts'
-const REDIRECTS_PATH = 'src/config/redirects.ts'
+  // 예전에 이 slug 를 비우고 떠난 리다이렉트가 남아 있으면 새 페이지를 가린다.
+  const redirect = await planRedirects([], [categoryUrl(op.slug)])
+  if (redirect) changes.push(redirect)
 
-const categoryUrl = (slug: string) => `/categories/${slug}`
-
-/** 옮겨진 주소를 리다이렉트 설정에 적는다. 적을 게 없으면 null. */
-async function planRedirects(moves: Move[]): Promise<Change | null> {
-  const real = moves.filter((m) => m.from !== m.to)
-  if (real.length === 0) return null
-
-  const raw = await readRepoFile(REDIRECTS_PATH)
-  if (raw === null) throw new Error(`${REDIRECTS_PATH} 를 읽지 못했습니다`)
-
-  const edit = applyMoves(raw, real)
-  if (!edit) return null
-
-  return {
-    path: REDIRECTS_PATH,
-    slug: 'redirects',
-    title: '리다이렉트',
-    field: 'REDIRECTS',
-    before: `(${real.length}개 추가 전)`,
-    after: real.map((m) => `${m.from} → ${m.to}`).join('\n'),
-    op: 'update',
-    nextRaw: edit.next,
-  }
+  return { changes, headline: `'${op.name}' 카테고리를 추가합니다` }
 }
 
 /**
@@ -312,6 +354,9 @@ async function planCategoryRename(
   const bulk = planBulk(posts, slugs, () => ({
     edits: [{ field: 'category', line: `category: ${yamlScalar(op.name)}` }],
   }))
+  // 카테고리 이름은 velite 스키마의 enum 이다(velite.config.ts 의 s.enum).
+  // 한 글이라도 못 따라오면 콘텐츠 빌드가 통째로 죽는다. 부분 적용은 없다.
+  if (bulk.skipped.length > 0) throw partialRename('카테고리', bulk.skipped)
   changes.push(...bulk.changes)
 
   const moved: Move[] =
@@ -415,6 +460,9 @@ async function planSeriesRename(
   const bulk = planBulk(posts, slugs, () => ({
     edits: [{ field: 'series', line: `series: ${yamlScalar(to)}` }],
   }))
+  // 옛 yml 을 지우므로, 못 따라온 글은 없는 시리즈를 가리킨 채 남는다.
+  // series 는 자유 문자열이라 스키마가 이걸 잡아주지 않는다 — 조용히 깨진다.
+  if (bulk.skipped.length > 0) throw partialRename('시리즈', bulk.skipped)
   changes.push(...bulk.changes)
 
   const moves: Move[] = [{ from: seriesUrl(from), to: seriesUrl(to) }]
@@ -445,21 +493,24 @@ async function planSeriesAdd(op: {
     throw new Error(`이미 '${op.id}' 시리즈가 있습니다`)
   }
   const raw = buildSeriesYml(op.id, op.title, op.description)
-  return {
-    changes: [
-      {
-        path,
-        slug: op.id,
-        title: op.title,
-        field: '시리즈',
-        before: '(없음)',
-        after: raw.trimEnd(),
-        op: 'create',
-        nextRaw: raw,
-      },
-    ],
-    headline: `'${op.title}' 시리즈를 만듭니다`,
-  }
+  const changes: Change[] = [
+    {
+      path,
+      slug: op.id,
+      title: op.title,
+      field: '시리즈',
+      before: '(없음)',
+      after: raw.trimEnd(),
+      op: 'create',
+      nextRaw: raw,
+    },
+  ]
+
+  // 예전에 이 id 를 비우고 떠난 리다이렉트가 남아 있으면 새 페이지를 가린다.
+  const redirect = await planRedirects([], [seriesUrl(op.id)])
+  if (redirect) changes.push(redirect)
+
+  return { changes, headline: `'${op.title}' 시리즈를 만듭니다` }
 }
 
 async function planSeriesEdit(op: {
@@ -562,7 +613,14 @@ export async function buildPlan(op: Operation): Promise<{ plan: Plan; changes: C
       changes = r.changes
       skipped = r.skipped
       // 옛 태그 주소는 죽지 않는다. 새 태그로 넘긴다.
-      moved = r.sources.map((t) => ({ from: tagUrl(t), to: tagUrl(op.to) }))
+      // 단 308 이 아니라 307 이다. 태그는 레지스트리가 없어서 아무 글에
+      // 그 이름을 다시 적는 순간 되살아나고, 그 경로는 여기를 지나지 않는다.
+      // 코드가 지킬 수 없는 약속을 영구 리다이렉트로 박지 않는다.
+      moved = r.sources.map((t) => ({
+        from: tagUrl(t),
+        to: tagUrl(op.to),
+        permanent: false,
+      }))
       const redirect = changes.length > 0 ? await planRedirects(moved) : null
       if (redirect) changes.push(redirect)
       headline =

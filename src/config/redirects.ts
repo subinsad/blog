@@ -13,8 +13,15 @@
  * 경고도 없이 리다이렉트만 안 걸린다. 실제로 확인한 동작이다.
  *   맞음: /tags/%EC%84%B1%EB%8A%A5
  *   틀림: /tags/성능
+ *
+ * permanent 를 생략하면 308 이다. 카테고리 slug 와 시리즈 id 는 레지스트리가
+ * 있어서 — 파일에 줄이나 yml 이 생겨야만 되살아난다 — 그 약속을 코드가 지킬
+ * 수 있다. 태그는 다르다. 아무 글 frontmatter 에 그 이름을 다시 적는 순간
+ * 주소가 살아나고, 그 경로는 관리 화면을 지나지 않아 아무도 못 막는다.
+ * 지킬 수 없는 약속을 308 로 하면(브라우저가 무기한 캐시한다) 그 주소는
+ * 영영 못 쓴다. 그래서 태그 병합만 permanent: false(307) 로 남긴다.
  */
-export type Redirect = { source: string; destination: string }
+export type Redirect = { source: string; destination: string; permanent?: boolean }
 
 export const REDIRECTS: Redirect[] = [
   /* @redirects-end */
