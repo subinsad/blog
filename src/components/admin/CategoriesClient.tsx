@@ -176,13 +176,17 @@ export function CategoriesClient({ rows }: { rows: CategoryRow[] }) {
 
             <label className="mb-3 block">
               <span className="mb-1 block text-xs text-fg-muted">이름</span>
+              {/*
+                slug 는 이름에서 뽑지 않는다. 'CS · 기초' → 'cs' 처럼 손으로
+                짧게 고르는 값이라 자동 생성('cs-gicho')은 매번 덮어쓰게 된다.
+                게다가 수정 중에 이름만 고쳤는데 slug 가 따라 움직이면 원치
+                않는 리다이렉트가 깔린다. (시리즈 id 는 길고 서술적이라
+                성격이 달라서, SeriesClient 는 title 에서 자동 생성한다.)
+              */}
               <input
                 autoFocus
                 value={name}
-                onChange={(e) => {
-                  setName(e.target.value)
-                  if (!slug) setSlug('')
-                }}
+                onChange={(e) => setName(e.target.value)}
                 placeholder="예: Infra"
                 className={field}
               />

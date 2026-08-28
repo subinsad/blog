@@ -5,11 +5,14 @@
  * 바꾸는 줄만 갈아끼운다. 손으로 쓴 주석이나 velite 가 무시하는 여분의
  * 키가 있어도 그대로 남는다.
  */
+import { encodeSeg } from '@/lib/slugify'
 import { fieldLines, yamlScalar } from './frontmatter-edit'
 
 export const seriesPath = (id: string) => `content/series/${id}.yml`
 
-export const seriesUrl = (id: string) => `/series/${id}`
+// id 는 isSafeSlug 를 통과한 [a-z0-9-] 뿐이라 encodeSeg 는 여기서 항등이다.
+// 그래도 통과시킨다 — 주소가 되는 값은 예외 없이 한 문을 지나야 한다.
+export const seriesUrl = (id: string) => `/series/${encodeSeg(id)}`
 
 export function buildSeriesYml(id: string, title: string, description: string): string {
   const lines = [`id: ${id}`, `title: ${yamlScalar(title)}`]
