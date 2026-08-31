@@ -41,9 +41,32 @@ context: inline
 
 ### 3. 검증 — 커밋보다 먼저
 
+typecheck·lint는 변경 내용과 무관하게 **항상** 돌린다.
+
 ```
-pnpm typecheck && pnpm lint && pnpm build
+pnpm typecheck && pnpm lint
 ```
+
+`pnpm build`는 1~2분 걸린다. 변경된 파일이 빌드에 영향을 줄 때만 돌린다.
+2단계에서 본 `git status --short` 경로 목록으로 판단한다.
+
+**빌드가 필요한 경로** — 하나라도 걸리면 `pnpm build`까지 돌린다.
+
+- `src/` 이하
+- `content/` 이하 — velite가 frontmatter를 스키마 검증하므로 본문 한 줄만 고쳐도
+  빌드해야 한다. 오타 하나가 빌드를 깨는 곳이다.
+- `public/` 이하
+- 루트 설정 파일: `next.config.ts`, `velite.config.ts`, `package.json`,
+  `pnpm-lock.yaml`, `tsconfig.json`, `eslint.config.mjs`, `postcss.config.mjs`
+
+**빌드를 건너뛰어도 되는 경로** — 변경이 *전부* 여기 안에 있을 때만 건너뛴다.
+
+- `.claude/` 이하 (스킬·훅·에이전트·로컬 설정)
+- `.codex/`, `.github/` 이하
+- 루트 문서: `README.md`, `AGENTS.md`, `CLAUDE.md`, `LICENSE`, `.gitignore`
+
+**애매하면 빌드한다.** 위 두 목록 어디에도 없는 경로가 섞여 있으면 건너뛰지 않는다.
+빌드 1분보다 깨진 main이 비싸다.
 
 빌드 산출물(`.next`, `.velite`, `public/static`)은 전부 gitignore라 워킹트리가
 더러워지지 않는다. 그래서 커밋 전에 돌리는 게 안전하다.
@@ -56,8 +79,9 @@ pnpm typecheck && pnpm lint && pnpm build
 
 **경로를 명시해서 add 한다. `git add -A` / `git add .` 금지.**
 
-`.claude/settings.local.json`은 추적되지도 ignore되지도 않은 개인 권한 설정이라
-`-A`를 쓰면 딸려 들어간다. 절대 스테이징하지 않는다.
+`.claude/settings.local.json`은 개인 권한 설정이다. `.gitignore`에 올라가 있지만
+`git add -f`로는 여전히 들어가므로 절대 스테이징하지 않는다. 이 저장소에서 `-A`를
+금지하는 이유는 앞으로 생길 그런 로컬 파일들 때문이기도 하다.
 
 `git status`로 스테이징 결과를 다시 확인하고, 파일명이 무해해 보여도 자격증명이
 들어갈 만한 파일이면 내용을 먼저 열어본다.
@@ -95,7 +119,8 @@ PR 본문 구성:
 
 - 브랜치명
 - PR 번호와 URL
-- 검증 결과 한 줄 (예: `typecheck·lint·build 통과`)
+- 검증 결과 한 줄 (예: `typecheck·lint·build 통과`).
+  빌드를 건너뛰었으면 사유를 붙인다 (예: `typecheck·lint 통과, build 생략(.claude/ 변경만)`)
 
 `git status`·`git diff`·커밋 로그·빌드 로그 원본은 반환하지 않는다.
 검증이 실패했을 때만 실패 출력을 붙인다.

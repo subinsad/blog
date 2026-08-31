@@ -47,3 +47,6 @@ next-env.d.ts
 
 # 로컬 프로토타입 산출물은 유지, 에디터 초안만 제외
 /content/**/*.draft.mdx
+
+# claude code 로컬 설정 (개인 권한 목록)
+.claude/settings.local.json
