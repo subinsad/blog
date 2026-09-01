@@ -10,6 +10,7 @@ import { CategoryBadge, Tag } from '@/components/post/Badge'
 import { Toc } from '@/components/post/Toc'
 import { ReadingProgress } from '@/components/post/ReadingProgress'
 import { PostCard } from '@/components/post/PostCard'
+import { Comments } from '@/components/post/Comments'
 import { Footer } from '@/components/layout/Footer'
 
 export const dynamicParams = false
@@ -138,6 +139,8 @@ export default async function PostPage({
                 </div>
               </section>
             )}
+
+            <Comments />
 
             <Footer />
           </article>
